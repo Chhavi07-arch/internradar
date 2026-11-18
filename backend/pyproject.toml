@@ -37,6 +37,8 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
+# Headlines and job titles use typographic quotes; matching them is intentional.
+allowed-confusables = ["’", "‘", "“", "”"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

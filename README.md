@@ -28,7 +28,7 @@ due soon and where you have already applied.
 |---|---|---|
 | 0 | Foundation: schema, normalisation, config, CLI | ✅ |
 | 1 | Sources: job boards (JobSpy), company ATS boards, de-dup pipeline | ✅ |
-| 1b | Funding radar: recently funded startups, hiring signals | ⏳ |
+| 1b | Funding radar: recently funded startups, hiring signals | ✅ |
 | 2 | Gmail ingestion: college + personal inbox | |
 | 3 | Dashboard (Next.js) + notifications | |
 | 4 | Eligibility gates + fit score | |
@@ -46,6 +46,7 @@ uv run internradar fetch         # poll every source once
 uv run internradar fetch -o ats  # only company career boards (fast)
 uv run internradar list --new    # what arrived in the latest run
 uv run internradar sources       # health of each source
+uv run internradar radar         # funding news → funded startups → their careers boards
 uv run pytest
 ```
 
@@ -62,6 +63,20 @@ uv run pytest
 |---|---|---|
 | LinkedIn, Indeed, Naukri | [JobSpy](https://github.com/speedyapply/JobSpy), small recent windows per role | no, expire by age |
 | Company boards | public Greenhouse / Lever / Ashby JSON APIs | yes, closed after 2 missed runs |
+
+## Funding radar
+
+A startup that has just raised money usually starts hiring within weeks, before its roles
+reach the job boards. `internradar radar`:
+
+1. reads funding news from Entrackr, Inc42, YourStory and Indian Startup News;
+2. parses each headline into company, amount, round and lead investor with plain rules
+   (no LLM), rejecting fund closes, stake sales, IPOs and "to raise" rumours;
+3. merges reports of the same round across outlets;
+4. looks for the company's Greenhouse / Lever / Ashby board, accepting it only if the page
+   names the company **and** lists a role in India (a same-named board elsewhere is common);
+5. hands every verified board to `fetch`, so a funded startup's internships surface the hour
+   they are posted.
 
 Every posting passes a relevance filter (whole-word "intern", tech role, Bengaluru or
 India-open remote) before it is stored.

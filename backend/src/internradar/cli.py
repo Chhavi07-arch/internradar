@@ -1,13 +1,23 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import typer
 from rich.console import Console
 from rich.table import Table
 from sqlmodel import col, func, select
 
-from internradar.config import get_settings, load_search_config, load_watchlist
+from internradar.config import Watchlist, get_settings, load_search_config, load_watchlist
 from internradar.db import init_db, session_scope
-from internradar.models import Kind, Lifecycle, Opportunity, Sighting, SourceRun, utcnow
+from internradar.funding.radar import funded_companies, make_client, run_radar
+from internradar.models import (
+    FundingEvent,
+    FundingMention,
+    Kind,
+    Lifecycle,
+    Opportunity,
+    Sighting,
+    SourceRun,
+    utcnow,
+)
 from internradar.pipeline import run_fetch
 from internradar.sources import build_sources
 
@@ -40,12 +50,17 @@ def fetch(
     """Fetch every source once and store new internships."""
     init_db()
     search = load_search_config()
-    sources = build_sources(load_watchlist(), set(only) if only else None)
+    watchlist = load_watchlist()
+    with session_scope() as session:
+        radar = funded_companies(session, watchlist)
+    sources = build_sources(
+        Watchlist(companies=watchlist.companies + radar), set(only) if only else None
+    )
     if not sources:
         raise typer.BadParameter(f"no source matches {only}")
 
     with (
-        console.status(f"Fetching {len(sources)} sources…"),
+        console.status(f"Fetching {len(sources)} sources ({len(radar)} from the funding radar)…"),
         session_scope() as session,
     ):
         summary = run_fetch(session, sources, search)
@@ -135,6 +150,80 @@ def sources() -> None:
             source, "✓" if ok else "[red]✗[/]", str(fetched), str(kept), str(new), error or ""
         )
     console.print(table)
+
+
+@app.command()
+def radar(
+    days: int = typer.Option(60, "--days", "-d", help="Show rounds from the last N days."),
+    show_all: bool = typer.Option(False, "--all", help="Include non-tech companies."),
+    offline: bool = typer.Option(False, "--offline", help="Only show stored rounds."),
+) -> None:
+    """Scan funding news, find funded startups' careers boards, and show the hiring signals."""
+    init_db()
+    watchlist = load_watchlist()
+    if not offline:
+        with (
+            console.status("Reading funding news and looking for careers boards…"),
+            make_client() as client,
+            session_scope() as session,
+        ):
+            summary = run_radar(session, watchlist, client)
+            new_rounds = len(summary.new_events)
+            boards = [f"{e.company} → {e.board_ats}:{e.board_slug}" for e in summary.boards_found]
+        for feed, result in summary.feeds.items():
+            ok = isinstance(result, int)
+            console.print(f"{'[green]✓[/]' if ok else '[red]✗[/]'} {feed}: {result}")
+        console.print(f"[bold]{new_rounds} new rounds, {len(boards)} careers boards found.[/]")
+        for board in boards:
+            console.print(f"  [green]+[/] {board}")
+
+    with session_scope() as session:
+        mentions = (
+            select(FundingMention.event_id, func.count().label("n"))
+            .group_by(FundingMention.event_id)
+            .subquery()
+        )
+        internships = (
+            select(Opportunity.company_norm, func.count().label("n"))
+            .where(Opportunity.kind == Kind.INTERNSHIP, Opportunity.status != Lifecycle.CLOSED)
+            .group_by(Opportunity.company_norm)
+            .subquery()
+        )
+        query = (
+            select(FundingEvent, mentions.c.n, internships.c.n)
+            .join(mentions, mentions.c.event_id == FundingEvent.id)
+            .outerjoin(internships, internships.c.company_norm == FundingEvent.company_norm)
+            .where(FundingEvent.published_at >= utcnow() - timedelta(days=days))
+            .order_by(col(FundingEvent.published_at).desc())
+        )
+        if not show_all:
+            query = query.where(col(FundingEvent.is_tech).is_(True))
+        watched = {c.name.lower(): c for c in watchlist.companies}
+        rows = [
+            (
+                e.published_at, e.company, e.round, e.amount_text, e.lead_investors, e.url,
+                f"{e.board_ats}:{e.board_slug}" if e.board_slug
+                else "watchlist" if e.company.lower() in watched
+                else "—",
+                n_mentions, n_interns or 0,
+            )
+            for e, n_mentions, n_interns in session.exec(query)
+        ]  # fmt: skip
+
+    table = Table(title=f"Funding radar: last {days} days", title_justify="left")
+    for column in ("Date", "Company", "Round", "Amount", "Led by", "Careers board", "Interns"):
+        table.add_column(column, overflow="fold")
+    for when, company, round_, amount, lead, url, board, n_mentions, n_interns in rows:
+        name = f"[link={url}]{company}[/link]" + (
+            f" [dim]x{n_mentions}[/]" if n_mentions > 1 else ""
+        )
+        table.add_row(
+            f"{when:%d %b}", name, round_ or "—", amount or "—", lead or "—",
+            f"[green]{board}[/]" if ":" in board else board,
+            f"[bold green]{n_interns}[/]" if n_interns else "—",
+        )  # fmt: skip
+    console.print(table)
+    console.print("[dim]xN = reported by N outlets. Boards found here are polled by `fetch`.[/]")
 
 
 def _age(moment: datetime | None) -> str:

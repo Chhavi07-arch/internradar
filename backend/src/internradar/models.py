@@ -108,3 +108,35 @@ class SourceRun(SQLModel, table=True):
     new: int = 0  # ...that became new opportunities
     duration_ms: int = 0
     error: str | None = None
+
+
+class FundingEvent(SQLModel, table=True):
+    """A startup funding round seen in the news; a recent round is a strong hiring signal."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    company: str
+    company_norm: str = Field(index=True)
+    round: str | None = None
+    amount_text: str | None = None
+    amount_usd: float | None = None
+    lead_investors: str | None = None
+    is_tech: bool = False
+    headline: str  # first headline seen, shown on the dashboard
+    url: str
+    published_at: datetime = Field(default_factory=utcnow, index=True)
+    discovered_at: datetime = Field(default_factory=utcnow)
+
+    # careers board, found automatically and verified (see funding/boards.py)
+    board_ats: str | None = None
+    board_slug: str | None = None
+    board_checked_at: datetime | None = None
+
+
+class FundingMention(SQLModel, table=True):
+    """One article about a funding event; several outlets usually cover the same round."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    event_id: int = Field(foreign_key="fundingevent.id", index=True)
+    url: str = Field(unique=True)
+    feed: str
+    headline: str
