@@ -29,7 +29,7 @@ due soon and where you have already applied.
 | 0 | Foundation: schema, normalisation, config, CLI | ✅ |
 | 1 | Sources: job boards (JobSpy), company ATS boards, de-dup pipeline | ✅ |
 | 1b | Funding radar: recently funded startups, hiring signals | ✅ |
-| 2 | Gmail ingestion: college + personal inbox | |
+| 2 | Gmail ingestion: college + personal inbox | ✅ |
 | 3 | Dashboard (Next.js) + notifications | |
 | 4 | Eligibility gates + fit score | |
 | 5 | LaTeX resume tailoring with fabrication checks, git-versioned | |
@@ -47,6 +47,8 @@ uv run internradar fetch -o ats  # only company career boards (fast)
 uv run internradar list --new    # what arrived in the latest run
 uv run internradar sources       # health of each source
 uv run internradar radar         # funding news → funded startups → their careers boards
+uv run internradar gmail connect college   # one-time, opens the browser (read-only)
+uv run internradar gmail status            # what has been read from each inbox
 uv run pytest
 ```
 
@@ -63,6 +65,35 @@ uv run pytest
 |---|---|---|
 | LinkedIn, Indeed, Naukri | [JobSpy](https://github.com/speedyapply/JobSpy), small recent windows per role | no, expire by age |
 | Company boards | public Greenhouse / Lever / Ashby JSON APIs | yes, closed after 2 missed runs |
+
+## Gmail (college + personal inbox)
+
+`fetch` also reads your connected inboxes. Cheap rules triage each email (job alert,
+placement mail, application update, other); only the first two go to Claude, which fills a
+fixed schema: company, role, location, apply link, deadline, stipend and eligibility (CGPA,
+branches, batches, backlogs).
+
+Emails are **untrusted input**, so the model has no tools and its output is checked in code:
+an apply link that does not literally appear in the email is dropped, and deadlines must be
+real dates. Every email is downloaded and extracted once; failures are retried next sync.
+Opportunities from email go through the same de-duplication as everything else, so a
+LinkedIn alert and the LinkedIn listing are one card, and a passed deadline closes the card.
+
+### One-time setup (about 5 minutes)
+
+1. [Google Cloud console](https://console.cloud.google.com/) → create a project.
+2. *APIs & Services → Library* → enable **Gmail API**.
+3. *OAuth consent screen* → User type **External** → fill in the app name and your email →
+   *Test users*: add every Gmail address you will connect.
+4. *Credentials → Create credentials → OAuth client ID* → type **Desktop app** →
+   download the JSON and save it as `data/google_client_secret.json`.
+5. `cp .env.example .env` and set `ANTHROPIC_API_KEY`.
+6. `uv run internradar gmail connect college` (and `personal`).
+
+The only scope requested is `gmail.readonly`. Tokens live in `data/tokens/` (git-ignored).
+While the OAuth app is in *Testing*, Google expires tokens after 7 days; reconnect when
+`fetch` says so. If a college Workspace account blocks third-party apps, set up a Gmail
+filter that forwards placement mail to your personal inbox and connect that instead.
 
 ## Funding radar
 

@@ -1,14 +1,29 @@
 from datetime import datetime, timedelta
 
+import anthropic
+import httpx
 import typer
 from rich.console import Console
 from rich.table import Table
 from sqlmodel import col, func, select
 
-from internradar.config import Watchlist, get_settings, load_search_config, load_watchlist
+from internradar.config import (
+    Watchlist,
+    get_settings,
+    load_gmail_config,
+    load_search_config,
+    load_watchlist,
+)
 from internradar.db import init_db, session_scope
 from internradar.funding.radar import funded_companies, make_client, run_radar
+from internradar.gmail import auth
+from internradar.gmail.client import GmailClient
+from internradar.gmail.extract import ClaudeExtractor
+from internradar.gmail.source import build_email_sources
+from internradar.gmail.sync import SyncResult, sync_account
 from internradar.models import (
+    EmailKind,
+    EmailMessage,
     FundingEvent,
     FundingMention,
     Kind,
@@ -22,6 +37,8 @@ from internradar.pipeline import run_fetch
 from internradar.sources import build_sources
 
 app = typer.Typer(help="InternRadar: one dashboard for every internship.", no_args_is_help=True)
+gmail_app = typer.Typer(help="Connect and sync inboxes (read-only).", no_args_is_help=True)
+app.add_typer(gmail_app, name="gmail")
 console = Console()
 
 
@@ -44,18 +61,29 @@ def init() -> None:
 @app.command()
 def fetch(
     only: list[str] = typer.Option(  # noqa: B008
-        None, "--only", "-o", help='Source name ("linkedin", "ashby:sarvam") or "boards" / "ats".'
+        None,
+        "--only",
+        "-o",
+        help='A source ("linkedin", "ashby:sarvam", "gmail:college") or "boards"/"ats"/"gmail".',
     ),
+    gmail: bool = typer.Option(True, "--gmail/--no-gmail", help="Sync connected inboxes first."),
 ) -> None:
     """Fetch every source once and store new internships."""
     init_db()
     search = load_search_config()
     watchlist = load_watchlist()
+    wanted = set(only) if only else None
+    if gmail and (not wanted or "gmail" in wanted or any(w.startswith("gmail:") for w in wanted)):
+        _print_sync(_sync_inboxes())
     with session_scope() as session:
         radar = funded_companies(session, watchlist)
-    sources = build_sources(
-        Watchlist(companies=watchlist.companies + radar), set(only) if only else None
-    )
+        email_sources = [
+            s
+            for s in build_email_sources(session, load_gmail_config())
+            if not wanted or "gmail" in wanted or s.name in wanted
+        ]
+    sources = build_sources(Watchlist(companies=watchlist.companies + radar), wanted)
+    sources += email_sources
     if not sources:
         raise typer.BadParameter(f"no source matches {only}")
 
@@ -224,6 +252,97 @@ def radar(
         )  # fmt: skip
     console.print(table)
     console.print("[dim]xN = reported by N outlets. Boards found here are polled by `fetch`.[/]")
+
+
+@gmail_app.command("connect")
+def gmail_connect(
+    label: str = typer.Argument(..., help="Account label from config/gmail.yaml"),
+) -> None:
+    """Grant read-only access to an inbox (opens the browser)."""
+    if label not in {a.label for a in load_gmail_config().accounts}:
+        raise typer.BadParameter(f"'{label}' is not an account in config/gmail.yaml")
+    try:
+        credentials = auth.connect(label)
+    except auth.NotConnectedError as exc:
+        console.print(f"[red]✗[/] {exc}")
+        raise typer.Exit(1) from exc
+    email = GmailClient(credentials.token).profile_email()
+    console.print(f"[green]✓[/] connected '{label}' → {email} (read-only)")
+
+
+@gmail_app.command("sync")
+def gmail_sync() -> None:
+    """Read new mail from every connected inbox and extract opportunities."""
+    init_db()
+    _print_sync(_sync_inboxes())
+
+
+@gmail_app.command("status")
+def gmail_status() -> None:
+    """Connected inboxes and what has been read from each."""
+    init_db()
+    table = Table(title="Inboxes", title_justify="left")
+    for column in ("Account", "Connected", "Emails", "Opportunity mail", "Extracted", "Pending"):
+        table.add_column(column)
+    with session_scope() as session:
+        for account in load_gmail_config().accounts:
+            rows = session.exec(
+                select(EmailMessage).where(EmailMessage.account == account.label)
+            ).all()
+            relevant = [r for r in rows if r.kind in (EmailKind.JOB_ALERT, EmailKind.OPPORTUNITY)]
+            table.add_row(
+                account.label,
+                "[green]yes[/]" if auth.is_connected(account.label) else "no",
+                str(len(rows)),
+                str(len(relevant)),
+                str(sum(len(r.extracted or []) for r in relevant)) + " opportunities",
+                str(sum(r.extracted_at is None for r in relevant)),
+            )
+    console.print(table)
+    if not _llm_configured():
+        console.print(
+            "[yellow]![/] ANTHROPIC_API_KEY not set: emails are stored but not extracted."
+        )
+
+
+def _llm_configured() -> bool:
+    return bool(get_settings().anthropic_api_key)
+
+
+def _sync_inboxes() -> list[SyncResult]:
+    settings = get_settings()
+    config = load_gmail_config()
+    extractor = (
+        ClaudeExtractor(settings.llm_model, anthropic.Anthropic(api_key=settings.anthropic_api_key))
+        if _llm_configured()
+        else None
+    )
+    results = []
+    for account in config.accounts:
+        if not auth.is_connected(account.label):
+            continue
+        try:
+            gmail = GmailClient(auth.load(account.label).token)
+            with session_scope() as session, console.status(f"Reading {account.label} inbox…"):
+                results.append(
+                    sync_account(session, account, gmail, extractor, config.lookback_days)
+                )
+        except (auth.NotConnectedError, httpx.HTTPError) as exc:
+            results.append(SyncResult(account=account.label, errors=[str(exc)]))
+    return results
+
+
+def _print_sync(results: list[SyncResult]) -> None:
+    for r in results:
+        line = (
+            f"gmail:{r.account}: {r.new} new emails, "
+            f"{r.opportunities} opportunities from {r.extracted} emails"
+        )
+        if r.pending:
+            line += f", [yellow]{r.pending} waiting for extraction[/]"
+        console.print(("[red]✗[/] " if r.errors and not r.new else "[green]✓[/] ") + line)
+        for error in r.errors[:3]:
+            console.print(f"    [red]{error}[/]")
 
 
 def _age(moment: datetime | None) -> str:

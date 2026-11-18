@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 
 from rapidfuzz import fuzz
 from sqlalchemy import update
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 from internradar.config import SearchConfig
 from internradar.models import (
@@ -44,7 +44,7 @@ MAX_PARALLEL_SOURCES = 8
 # Fields a fetch may write. User state (bookmarked, hidden, notes) is deliberately absent.
 _SOURCE_FIELDS = (
     "title", "company", "location", "url", "apply_url", "description", "posted_at",
-    "deadline_at", "stipend_min", "stipend_max", "currency", "pay_period",
+    "deadline_at", "stipend_min", "stipend_max", "currency", "pay_period", "eligibility",
 )  # fmt: skip
 
 
@@ -98,7 +98,7 @@ def run_fetch(
         source_runs.append(source_run)
 
     _expire_stale_board_listings(session, now)
-    _close_opportunities_without_open_sightings(session)
+    _close_finished_opportunities(session, now)
     run.finished_at = utcnow()
     session.flush()
     return RunSummary(run_id=run.id, sources=source_runs)
@@ -243,7 +243,8 @@ def _expire_stale_board_listings(session: Session, now: datetime) -> None:
     )
 
 
-def _close_opportunities_without_open_sightings(session: Session) -> None:
+def _close_finished_opportunities(session: Session, now: datetime) -> None:
+    """Closed when every source stopped listing it, or when its deadline has passed."""
     session.flush()
     has_open_sighting = (
         select(Sighting.id)
@@ -252,7 +253,10 @@ def _close_opportunities_without_open_sightings(session: Session) -> None:
     )
     session.execute(
         update(Opportunity)
-        .where(Opportunity.status != Lifecycle.CLOSED, ~has_open_sighting)
+        .where(
+            Opportunity.status != Lifecycle.CLOSED,
+            ~has_open_sighting | (col(Opportunity.deadline_at) < now),
+        )
         .values(status=Lifecycle.CLOSED)
         .execution_options(synchronize_session="fetch")
     )

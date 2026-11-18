@@ -8,6 +8,7 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any
 
 from internradar.config import SearchConfig
 from internradar.models import Origin
@@ -34,6 +35,10 @@ class Posting:
     stipend_max: float | None = None
     currency: str | None = None
     pay_period: str | None = None
+    eligibility: dict[str, Any] | None = None
+    # The user vouches for this source (their placement cell), so a posting that does not
+    # state a location is kept rather than dropped by the location filter.
+    trusted: bool = False
 
 
 @dataclass(slots=True)

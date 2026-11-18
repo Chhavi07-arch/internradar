@@ -1,5 +1,6 @@
 import pytest
 from sqlalchemy.exc import IntegrityError
+from sqlmodel import Session, SQLModel, create_engine, select
 
 from internradar.models import Opportunity, Origin, Sighting
 
@@ -44,3 +45,22 @@ def test_same_native_id_from_same_source_is_rejected(session):
 
 def test_origin_rank_prefers_company_boards():
     assert Origin.ATS.rank < Origin.LIST.rank < Origin.BOARD.rank < Origin.EMAIL.rank
+
+
+def test_init_db_adds_new_nullable_columns_without_losing_rows(tmp_path):
+    from sqlalchemy import inspect, text
+
+    from internradar.db import init_db
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'old.db'}")
+    SQLModel.metadata.create_all(engine)
+    with Session(engine) as s:
+        s.add(_opportunity("kept"))
+        s.commit()
+    with engine.begin() as conn:  # simulate a database from before `eligibility` existed
+        conn.execute(text("ALTER TABLE opportunity DROP COLUMN eligibility"))
+
+    init_db(engine)
+    assert "eligibility" in {c["name"] for c in inspect(engine).get_columns("opportunity")}
+    with Session(engine) as s:
+        assert s.exec(select(Opportunity)).one().uid == "kept"

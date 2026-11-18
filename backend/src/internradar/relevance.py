@@ -66,5 +66,8 @@ def is_relevant(posting: Posting, search: SearchConfig) -> bool:
         normalize_company(posting.company) not in excluded
         and is_internship(posting.title, posting.flagged_internship)
         and is_tech(posting.title)
-        and location_matches(posting.location, posting.is_remote, search)
+        and (
+            (posting.trusted and not posting.location)
+            or location_matches(posting.location, posting.is_remote, search)
+        )
     )

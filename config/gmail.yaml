@@ -1,0 +1,22 @@
+# Inboxes InternRadar reads (read-only). Connect each one once with:
+#   uv run internradar gmail connect <label>
+#
+# query:   Gmail search syntax; InternRadar adds `newer_than:<lookback_days>d` itself.
+# trusted: mail you trust to be relevant even without a location (the placement cell),
+#          so opportunities are kept when the email does not say where the role is.
+
+lookback_days: 30
+
+accounts:
+  - label: college
+    trusted: true
+    query: >-
+      (intern OR internship OR placement OR hiring OR opportunity OR drive OR
+      "apply by" OR "last date" OR "register")
+
+  - label: personal
+    trusted: false
+    query: >-
+      (from:linkedin.com OR from:naukri.com OR from:internshala.com OR from:unstop.com OR
+      from:indeed.com OR from:wellfound.com OR from:instahyre.com OR from:cutshort.io OR
+      subject:(intern OR internship))

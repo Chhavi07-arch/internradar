@@ -8,8 +8,9 @@ never by a fetch.
 
 from datetime import UTC, datetime
 from enum import StrEnum
+from typing import Any
 
-from sqlalchemy import Column, Text, UniqueConstraint
+from sqlalchemy import JSON, Column, Text, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 
@@ -63,6 +64,8 @@ class Opportunity(SQLModel, table=True):
     pay_period: str | None = None
     posted_at: datetime | None = None
     deadline_at: datetime | None = None
+    # {"min_cgpa": 7.0, "branches": ["CSE"], "batches": [2028], "backlogs_allowed": false, ...}
+    eligibility: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
 
     primary_origin: Origin
     status: Lifecycle = Field(default=Lifecycle.NEW, index=True)
@@ -140,3 +143,31 @@ class FundingMention(SQLModel, table=True):
     url: str = Field(unique=True)
     feed: str
     headline: str
+
+
+class EmailKind(StrEnum):
+    JOB_ALERT = "job_alert"  # LinkedIn / Naukri / Internshala alert digests
+    OPPORTUNITY = "opportunity"  # placement-cell mail and direct invitations
+    STATUS = "status"  # replies about an application (used by application tracking)
+    OTHER = "other"
+
+
+class EmailMessage(SQLModel, table=True):
+    """An email read from a connected inbox. Bodies stay in the local database only."""
+
+    __table_args__ = (UniqueConstraint("account", "gmail_id"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    account: str = Field(index=True)
+    gmail_id: str
+    thread_id: str
+    sender: str
+    subject: str
+    received_at: datetime = Field(index=True)
+    kind: EmailKind = Field(index=True)
+    body: str = Field(sa_column=Column(Text))
+
+    # Opportunities extracted by the LLM, already validated against the email text.
+    extracted: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSON))
+    extracted_at: datetime | None = None
+    extract_error: str | None = None

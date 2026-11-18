@@ -2,7 +2,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from functools import lru_cache
 
-from sqlalchemy import Engine, event
+from sqlalchemy import Engine, event, inspect, text
 from sqlmodel import Session, SQLModel, create_engine
 
 from internradar import models  # noqa: F401  (registers tables on SQLModel.metadata)
@@ -26,7 +26,30 @@ def get_engine() -> Engine:
 
 
 def init_db(engine: Engine | None = None) -> None:
-    SQLModel.metadata.create_all(engine or get_engine())
+    engine = engine or get_engine()
+    SQLModel.metadata.create_all(engine)
+    _add_missing_columns(engine)
+
+
+def _add_missing_columns(engine: Engine) -> None:
+    """Additive schema upgrades: new nullable columns appear without losing local data.
+
+    create_all() only creates missing tables. Anything beyond adding a nullable column
+    (renames, type changes) needs a real migration tool.
+    """
+    inspector = inspect(engine)
+    with engine.begin() as conn:
+        for table in SQLModel.metadata.sorted_tables:
+            existing = {c["name"] for c in inspector.get_columns(table.name)}
+            for column in table.columns:
+                if column.name in existing:
+                    continue
+                if not column.nullable:
+                    raise RuntimeError(
+                        f"{table.name}.{column.name} is new and NOT NULL; add a migration"
+                    )
+                kind = column.type.compile(dialect=engine.dialect)
+                conn.execute(text(f'ALTER TABLE "{table.name}" ADD COLUMN "{column.name}" {kind}'))
 
 
 @contextmanager
