@@ -39,6 +39,13 @@ _CITY_ALIASES = {
     "calcutta": "kolkata",
 }
 
+# Canonical names of cities likely to appear in Indian listings, found anywhere in the text,
+# so "Onsite in Bangalore" and "Bengaluru (Hybrid)" both resolve to "bengaluru".
+_KNOWN_CITIES = set(_CITY_ALIASES.values()) | {
+    "hyderabad", "noida", "pune", "ahmedabad", "jaipur", "kochi", "chandigarh",
+    "indore", "coimbatore", "thiruvananthapuram", "bhubaneswar", "mysuru",
+}  # fmt: skip
+
 _REMOTE_WORDS = {"remote", "wfh", "work from home", "anywhere", "worldwide"}
 
 # Query params that only track where a click came from; they never identify the job.
@@ -80,7 +87,15 @@ def normalize_city(location: str | None) -> str | None:
     padded = f" {_fold(location)} "
     if any(f" {word} " in padded for word in _REMOTE_WORDS):
         return "remote"
-    first = _fold(location.split(",")[0])
+    # Earliest known city wins: "Hyderabad; Bengaluru" -> "hyderabad".
+    found = [
+        (padded.find(f" {name} "), _CITY_ALIASES.get(name, name))
+        for name in (*_KNOWN_CITIES, *_CITY_ALIASES)
+        if f" {name} " in padded
+    ]
+    if found:
+        return min(found)[1]
+    first = _fold(re.split(r"[,;/|(]", location)[0])
     return _CITY_ALIASES.get(first, first) or None
 
 

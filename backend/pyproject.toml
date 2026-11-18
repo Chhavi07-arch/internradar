@@ -13,6 +13,9 @@ dependencies = [
     "sqlmodel>=0.0.22",
     "typer>=0.15",
     "rich>=13.9",
+    "python-jobspy>=1.4.1",
+    "httpx>=0.28.1",
+    "rapidfuzz>=3.14.6",
 ]
 
 [project.scripts]

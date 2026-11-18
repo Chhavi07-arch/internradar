@@ -1,0 +1,34 @@
+# Companies whose own career boards are polled directly. Postings appear here hours or days
+# before they reach LinkedIn, and the data (deadline, apply link) is the most accurate.
+#
+# ats: greenhouse | lever | ashby
+# slug: the board name in the careers URL, e.g. jobs.ashbyhq.com/<slug>
+# Every slug below was verified to respond and to list roles in India or remote.
+
+companies:
+  # AI-first
+  - {name: Sarvam AI, ats: ashby, slug: sarvam}
+  - {name: Composio, ats: ashby, slug: composio}
+  - {name: Smallest AI, ats: ashby, slug: smallest}
+  - {name: ElevenLabs, ats: ashby, slug: elevenlabs}
+  - {name: OpenAI, ats: ashby, slug: openai}
+  - {name: Anthropic, ats: greenhouse, slug: anthropic}
+  - {name: Glean, ats: greenhouse, slug: gleanwork}
+  - {name: Databricks, ats: greenhouse, slug: databricks}
+  - {name: TrueFoundry, ats: greenhouse, slug: truefoundry}
+  - {name: Observe.AI, ats: greenhouse, slug: observeai}
+  # Product companies hiring interns in Bengaluru
+  - {name: HackerRank, ats: greenhouse, slug: hackerrank}
+  - {name: Stripe, ats: greenhouse, slug: stripe}
+  - {name: Rubrik, ats: greenhouse, slug: rubrik}
+  - {name: InMobi, ats: greenhouse, slug: inmobi}
+  - {name: Druva, ats: greenhouse, slug: druva}
+  - {name: Groww, ats: greenhouse, slug: groww}
+  - {name: Atlan, ats: ashby, slug: atlan}
+  - {name: SigNoz, ats: ashby, slug: signoz}
+  - {name: SpotDraft, ats: ashby, slug: spotdraft}
+  - {name: Meesho, ats: lever, slug: meesho}
+  - {name: CRED, ats: lever, slug: cred}
+  - {name: FamPay, ats: lever, slug: fampay}
+  - {name: Zeta, ats: lever, slug: zeta}
+  - {name: Mindtickle, ats: lever, slug: mindtickle}

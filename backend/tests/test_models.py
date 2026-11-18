@@ -1,16 +1,7 @@
 import pytest
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import Session, SQLModel, create_engine
 
 from internradar.models import Opportunity, Origin, Sighting
-
-
-@pytest.fixture
-def session():
-    engine = create_engine("sqlite://")
-    SQLModel.metadata.create_all(engine)
-    with Session(engine) as s:
-        yield s
 
 
 def _opportunity(uid: str = "abc") -> Opportunity:

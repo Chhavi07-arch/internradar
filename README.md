@@ -27,7 +27,8 @@ due soon and where you have already applied.
 | Block | Scope | Status |
 |---|---|---|
 | 0 | Foundation: schema, normalisation, config, CLI | ✅ |
-| 1 | Sources: job boards (JobSpy), company ATS boards, de-dup pipeline | ⏳ |
+| 1 | Sources: job boards (JobSpy), company ATS boards, de-dup pipeline | ✅ |
+| 1b | Funding radar: recently funded startups, hiring signals | ⏳ |
 | 2 | Gmail ingestion: college + personal inbox | |
 | 3 | Dashboard (Next.js) + notifications | |
 | 4 | Eligibility gates + fit score | |
@@ -40,17 +41,38 @@ due soon and where you have already applied.
 ```bash
 cd backend
 uv sync
-uv run internradar init      # creates data/internradar.db, validates config/search.yaml
+uv run internradar init          # create data/internradar.db, validate config
+uv run internradar fetch         # poll every source once
+uv run internradar fetch -o ats  # only company career boards (fast)
+uv run internradar list --new    # what arrived in the latest run
+uv run internradar sources       # health of each source
 uv run pytest
 ```
 
-Edit `config/search.yaml` to change roles, cities and batch.
+- `config/search.yaml`: roles, cities, batch.
+- `config/watchlist.yaml`: companies whose Greenhouse / Lever / Ashby boards are polled directly.
+
+> Keep the project outside iCloud-synced folders (Desktop/Documents on macOS). iCloud hides
+> files inside dot-directories such as `.venv`, which breaks Python imports, and syncing a
+> live SQLite file risks corrupting it.
+
+## Sources
+
+| Source | How | Exhaustive |
+|---|---|---|
+| LinkedIn, Indeed, Naukri | [JobSpy](https://github.com/speedyapply/JobSpy), small recent windows per role | no, expire by age |
+| Company boards | public Greenhouse / Lever / Ashby JSON APIs | yes, closed after 2 missed runs |
+
+Every posting passes a relevance filter (whole-word "intern", tech role, Bengaluru or
+India-open remote) before it is stored.
 
 ## Layout
 
 ```
-backend/   FastAPI + SQLModel service and CLI (Python 3.11, uv)
-config/    search.yaml: roles, locations, batch
+backend/   SQLModel service and CLI (Python 3.11, uv)
+  sources/   one module per source family, all implementing Source.fetch()
+  pipeline   fetch → filter → de-duplicate → store → expire
+config/    search.yaml, watchlist.yaml
 data/      local SQLite database (git-ignored)
 ```
 

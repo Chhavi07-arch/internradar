@@ -103,7 +103,8 @@ class SourceRun(SQLModel, table=True):
     source: str
     ok: bool
     exhaustive: bool = Field(description="True if the source returns its full listing")
-    fetched: int = 0
-    new: int = 0
+    fetched: int = 0  # postings the source returned
+    kept: int = 0  # ...that passed the relevance filter
+    new: int = 0  # ...that became new opportunities
     duration_ms: int = 0
     error: str | None = None

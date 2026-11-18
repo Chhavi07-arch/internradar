@@ -25,3 +25,14 @@ locations:
 
 # Only keep postings newer than this when a source supports it.
 max_age_hours: 72
+
+# Never show postings from these companies. Seeded with recruiter "job farms" that post the
+# same generic listing under many titles to collect resumes. Matched after normalisation, so
+# "ThinkNovaa Pvt. Ltd." and "ThinkNovaa" are the same entry.
+exclude_companies:
+  - JobSPhere
+  - Jobs4PanIndia
+  - ThinkNovaa
+  - Crossing Infotech
+  - MediNex Workforce
+  - Talent to Job
