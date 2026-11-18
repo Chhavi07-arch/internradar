@@ -1,0 +1,40 @@
+[project]
+name = "internradar"
+version = "0.1.0"
+description = "One dashboard for every internship: college mail, personal mail, job boards and company career pages."
+authors = [
+    { name = "Chhavi07-arch", email = "chhavi.24bcs10201@sst.scaler.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "pyyaml>=6.0",
+    "sqlmodel>=0.0.22",
+    "typer>=0.15",
+    "rich>=13.9",
+]
+
+[project.scripts]
+internradar = "internradar.cli:app"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.8",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.3,<0.12.0"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

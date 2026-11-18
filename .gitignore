@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+.next/
+
+# Local data and secrets — never commit
+data/
+.env
+*.db
+*.db-*
+credentials*.json
+token*.json
+profile/profile.yaml
+
+.DS_Store

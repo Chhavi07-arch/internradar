@@ -1,0 +1,27 @@
+# What InternRadar looks for. Edit freely; every source reads from this file.
+
+candidate:
+  batch: 2028
+  degree: B.Tech CSE
+
+# Search terms sent to job boards. AI/ML roles are listed first so they are
+# fetched first when a board starts rate-limiting.
+roles:
+  - AI intern
+  - machine learning intern
+  - GenAI intern
+  - data science intern
+  - backend intern
+  - full stack intern
+  - frontend intern
+  - software engineer intern
+
+# Weighting used later by the fit score; does not filter anything out.
+preferred_roles: [ai, ml, genai, llm, data science]
+
+locations:
+  cities: [Bengaluru]
+  remote: true
+
+# Only keep postings newer than this when a source supports it.
+max_age_hours: 72
