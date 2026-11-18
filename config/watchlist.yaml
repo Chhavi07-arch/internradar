@@ -1,34 +1,50 @@
 # Companies whose own career boards are polled directly. Postings appear here hours or days
 # before they reach LinkedIn, and the data (deadline, apply link) is the most accurate.
 #
-# ats: greenhouse | lever | ashby
-# slug: the board name in the careers URL, e.g. jobs.ashbyhq.com/<slug>
-# Every slug below was verified to respond and to list roles in India or remote.
+# ats:     greenhouse | lever | ashby
+# slug:    the board name in the careers URL, e.g. jobs.ashbyhq.com/<slug>
+# tags:    free-form; "funded-2026" marks a recent round (a strong hiring signal)
+# funding: latest round as reported in the press, shown on the dashboard
+#
+# Every slug was verified on 2026-11-18 to respond and to belong to the named company.
+# Rounds were researched from Entrackr, Inc42, YourStory and TechCrunch the same day.
 
 companies:
-  # AI-first
-  - {name: Sarvam AI, ats: ashby, slug: sarvam}
-  - {name: Composio, ats: ashby, slug: composio}
-  - {name: Smallest AI, ats: ashby, slug: smallest}
-  - {name: ElevenLabs, ats: ashby, slug: elevenlabs}
-  - {name: OpenAI, ats: ashby, slug: openai}
-  - {name: Anthropic, ats: greenhouse, slug: anthropic}
-  - {name: Glean, ats: greenhouse, slug: gleanwork}
-  - {name: Databricks, ats: greenhouse, slug: databricks}
-  - {name: TrueFoundry, ats: greenhouse, slug: truefoundry}
-  - {name: Observe.AI, ats: greenhouse, slug: observeai}
-  # Product companies hiring interns in Bengaluru
-  - {name: HackerRank, ats: greenhouse, slug: hackerrank}
-  - {name: Stripe, ats: greenhouse, slug: stripe}
-  - {name: Rubrik, ats: greenhouse, slug: rubrik}
-  - {name: InMobi, ats: greenhouse, slug: inmobi}
-  - {name: Druva, ats: greenhouse, slug: druva}
-  - {name: Groww, ats: greenhouse, slug: groww}
-  - {name: Atlan, ats: ashby, slug: atlan}
-  - {name: SigNoz, ats: ashby, slug: signoz}
-  - {name: SpotDraft, ats: ashby, slug: spotdraft}
-  - {name: Meesho, ats: lever, slug: meesho}
-  - {name: CRED, ats: lever, slug: cred}
-  - {name: FamPay, ats: lever, slug: fampay}
-  - {name: Zeta, ats: lever, slug: zeta}
-  - {name: Mindtickle, ats: lever, slug: mindtickle}
+  # --- AI-first, funded in 2026 ---
+  - {name: Sarvam AI, ats: ashby, slug: sarvam, tags: [funded-2026, ai, llm, voice], funding: "Series B $300M (Jun 2026, Bessemer)"}
+  - {name: Ema, ats: ashby, slug: ema, tags: [funded-2026, ai, agents], funding: "Series B $77M (Sep 2026)"}
+  - {name: Lyzr, ats: ashby, slug: lyzr, tags: [funded-2026, ai, agents], funding: "Series B $100M (Jul 2026)"}
+  - {name: Smallest AI, ats: ashby, slug: smallest, tags: [funded-2026, ai, voice], funding: "Series A $13M (Jul 2026, Seligman Ventures)"}
+  - {name: Reo.Dev, ats: ashby, slug: reo-dev, tags: [funded-2026, ai, devtools], funding: "Series A $11.3M (Jul 2026, Elevation Capital)"}
+  - {name: Clueso, ats: ashby, slug: clueso, tags: [funded-2026, ai, saas], funding: "Series A $10M (Oct 2026, Dharana Capital)"}
+  - {name: Bolna, ats: ashby, slug: bolna, tags: [funded-2026, ai, voice], funding: "Seed $6.3M (Jan 2026, General Catalyst)"}
+
+  # --- Other tech, funded in 2026 ---
+  - {name: SpotDraft, ats: ashby, slug: spotdraft, tags: [funded-2026, ai, saas], funding: "Series B ext $8M (Jan 2026, Qualcomm Ventures)"}
+  - {name: CloudSEK, ats: greenhouse, slug: cloudsek, tags: [funded-2026, security], funding: "Series B2 $10M (Jan 2026)"}
+  - {name: CRED, ats: lever, slug: cred, tags: [funded-2026, fintech]}
+
+  # --- High-growth AI, hiring in India ---
+  - {name: Composio, ats: ashby, slug: composio, tags: [high-growth, ai, agents, devtools], funding: "Series A $25M (Jul 2025, Lightspeed)"}
+  - {name: TrueFoundry, ats: greenhouse, slug: truefoundry, tags: [high-growth, ai, infra], funding: "Series A $19M (Feb 2025, Intel Capital)"}
+  - {name: Atlan, ats: ashby, slug: atlan, tags: [high-growth, ai, data], funding: "Series C $105M (May 2024)"}
+  - {name: Glean, ats: greenhouse, slug: gleanwork, tags: [high-growth, ai], funding: "Series F $150M (Jun 2025)"}
+  - {name: Observe.AI, ats: greenhouse, slug: observeai, tags: [high-growth, ai, voice]}
+  - {name: SigNoz, ats: ashby, slug: signoz, tags: [high-growth, devtools]}
+  - {name: ElevenLabs, ats: ashby, slug: elevenlabs, tags: [ai, voice]}
+  - {name: OpenAI, ats: ashby, slug: openai, tags: [ai, llm]}
+  - {name: Anthropic, ats: greenhouse, slug: anthropic, tags: [ai, llm]}
+  - {name: Databricks, ats: greenhouse, slug: databricks, tags: [ai, data]}
+
+  # --- Established product companies with Bengaluru intern programs ---
+  - {name: Razorpay, ats: greenhouse, slug: razorpaysoftwareprivatelimited, tags: [fintech]}
+  - {name: Groww, ats: greenhouse, slug: groww, tags: [fintech]}
+  - {name: HackerRank, ats: greenhouse, slug: hackerrank, tags: [devtools]}
+  - {name: Stripe, ats: greenhouse, slug: stripe, tags: [fintech]}
+  - {name: Rubrik, ats: greenhouse, slug: rubrik, tags: [infra, security]}
+  - {name: InMobi, ats: greenhouse, slug: inmobi, tags: [adtech]}
+  - {name: Druva, ats: greenhouse, slug: druva, tags: [infra]}
+  - {name: Meesho, ats: lever, slug: meesho, tags: [ecommerce]}
+  - {name: FamPay, ats: lever, slug: fampay, tags: [fintech]}
+  - {name: Zeta, ats: lever, slug: zeta, tags: [fintech]}
+  - {name: Mindtickle, ats: lever, slug: mindtickle, tags: [saas]}
