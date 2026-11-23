@@ -19,3 +19,6 @@ token*.json
 profile/profile.yaml
 
 .DS_Store
+
+# Frontend build output (run `npm run build`)
+frontend/dist/

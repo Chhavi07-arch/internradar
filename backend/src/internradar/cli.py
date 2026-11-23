@@ -1,25 +1,22 @@
 from datetime import datetime, timedelta
 
-import httpx
 import typer
 from rich.console import Console
 from rich.table import Table
 from sqlmodel import col, func, select
 
 from internradar.config import (
-    Watchlist,
     get_settings,
     load_gmail_config,
     load_search_config,
     load_watchlist,
 )
 from internradar.db import init_db, session_scope
-from internradar.funding.radar import funded_companies, make_client, run_radar
+from internradar.funding.radar import make_client, run_radar
 from internradar.gmail import auth
 from internradar.gmail.client import GmailClient
 from internradar.gmail.extract import build_extractor
-from internradar.gmail.source import build_email_sources
-from internradar.gmail.sync import SyncResult, sync_account
+from internradar.gmail.sync import SyncResult
 from internradar.models import (
     EmailKind,
     EmailMessage,
@@ -32,8 +29,7 @@ from internradar.models import (
     SourceRun,
     utcnow,
 )
-from internradar.pipeline import run_fetch
-from internradar.sources import build_sources
+from internradar.service import NoSourcesError, fetch_everything, sync_inboxes
 
 app = typer.Typer(help="InternRadar: one dashboard for every internship.", no_args_is_help=True)
 gmail_app = typer.Typer(help="Connect and sync inboxes (read-only).", no_args_is_help=True)
@@ -68,35 +64,17 @@ def fetch(
     gmail: bool = typer.Option(True, "--gmail/--no-gmail", help="Sync connected inboxes first."),
 ) -> None:
     """Fetch every source once and store new internships."""
-    init_db()
-    search = load_search_config()
-    watchlist = load_watchlist()
-    wanted = set(only) if only else None
-    if gmail and (not wanted or "gmail" in wanted or any(w.startswith("gmail:") for w in wanted)):
-        _print_sync(_sync_inboxes())
-    with session_scope() as session:
-        radar = funded_companies(session, watchlist)
-        email_sources = [
-            s
-            for s in build_email_sources(session, load_gmail_config())
-            if not wanted or "gmail" in wanted or s.name in wanted
-        ]
-    sources = build_sources(Watchlist(companies=watchlist.companies + radar), wanted)
-    sources += email_sources
-    if not sources:
-        raise typer.BadParameter(f"no source matches {only}")
+    with console.status("Reading inboxes and fetching every source…"):
+        try:
+            report = fetch_everything(set(only) if only else None, gmail=gmail)
+        except NoSourcesError as exc:
+            raise typer.BadParameter(str(exc)) from exc
+    _print_sync(report.inboxes)
+    rows = [
+        (s.source, s.ok, s.fetched, s.kept, s.new, s.duration_ms, s.error) for s in report.sources
+    ]
 
-    with (
-        console.status(f"Fetching {len(sources)} sources ({len(radar)} from the funding radar)…"),
-        session_scope() as session,
-    ):
-        summary = run_fetch(session, sources, search)
-        rows = [
-            (s.source, s.ok, s.fetched, s.kept, s.new, s.duration_ms, s.error)
-            for s in summary.sources
-        ]
-
-    table = Table(title=f"Run #{summary.run_id}", title_justify="left")
+    table = Table(title=f"Run #{report.run_id}", title_justify="left")
     for column in ("Source", "OK", "Fetched", "Relevant", "New", "Time", "Error"):
         table.add_column(
             column, justify="right" if column in ("Fetched", "Relevant", "New", "Time") else "left"
@@ -253,6 +231,20 @@ def radar(
     console.print("[dim]xN = reported by N outlets. Boards found here are polled by `fetch`.[/]")
 
 
+@app.command()
+def serve(
+    port: int = typer.Option(8000, "--port", "-p"),
+    reload: bool = typer.Option(False, "--reload", help="Restart on code changes (development)."),
+) -> None:
+    """Run the dashboard at http://localhost:PORT."""
+    import uvicorn
+
+    console.print(f"[green]●[/] InternRadar dashboard: [link]http://localhost:{port}[/link]")
+    uvicorn.run(
+        "internradar.api:create_app", factory=True, host="127.0.0.1", port=port, reload=reload
+    )
+
+
 @gmail_app.command("connect")
 def gmail_connect(
     label: str = typer.Argument(..., help="Account label from config/gmail.yaml"),
@@ -273,7 +265,7 @@ def gmail_connect(
 def gmail_sync() -> None:
     """Read new mail from every connected inbox and extract opportunities."""
     init_db()
-    _print_sync(_sync_inboxes())
+    _print_sync(sync_inboxes())
 
 
 @gmail_app.command("status")
@@ -304,25 +296,6 @@ def gmail_status() -> None:
 
 def _llm_configured() -> bool:
     return build_extractor(get_settings()) is not None
-
-
-def _sync_inboxes() -> list[SyncResult]:
-    settings = get_settings()
-    config = load_gmail_config()
-    extractor = build_extractor(settings)
-    results = []
-    for account in config.accounts:
-        if not auth.is_connected(account.label):
-            continue
-        try:
-            gmail = GmailClient(auth.load(account.label).token)
-            with session_scope() as session, console.status(f"Reading {account.label} inbox…"):
-                results.append(
-                    sync_account(session, account, gmail, extractor, config.lookback_days)
-                )
-        except (auth.NotConnectedError, httpx.HTTPError) as exc:
-            results.append(SyncResult(account=account.label, errors=[str(exc)]))
-    return results
 
 
 def _print_sync(results: list[SyncResult]) -> None:

@@ -73,6 +73,7 @@ class Opportunity(SQLModel, table=True):
     last_seen_at: datetime = Field(default_factory=utcnow)
 
     # user state
+    seen_at: datetime | None = None  # opened in the dashboard; unset means "unread"
     bookmarked: bool = False
     hidden: bool = False
     notes: str | None = None

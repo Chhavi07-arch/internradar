@@ -30,11 +30,32 @@ due soon and where you have already applied.
 | 1 | Sources: job boards (JobSpy), company ATS boards, de-dup pipeline | ✅ |
 | 1b | Funding radar: recently funded startups, hiring signals | ✅ |
 | 2 | Gmail ingestion: college + personal inbox | ✅ |
-| 3 | Dashboard (Next.js) + notifications | |
+| 3 | Dashboard (React + FastAPI) | ✅ |
 | 4 | Eligibility gates + fit score | |
 | 5 | LaTeX resume tailoring with fabrication checks, git-versioned | |
 | 6 | Application tracking from email, analytics | |
 | 7 | Assisted form filling, interview prep, evaluation metrics | |
+
+## Dashboard
+
+```bash
+cd frontend && npm install && npm run build   # once, and after frontend changes
+cd ../backend && uv run internradar serve      # → http://localhost:8000
+```
+
+- **Inbox**: unread first (like email), stat tiles, new internships per day by source.
+- **Detail panel**: apply link, every source it was seen on, eligibility, funding badge,
+  your notes.
+- **Saved / Deadlines / Hidden** views, search, source filter, *Mark all read*.
+- **Funding radar** and **Sources** health pages.
+- **Refresh** runs a full fetch in the background; the CLI and dashboard share one lock,
+  so two fetches never overlap.
+
+For frontend development, run `npm run dev` (port 5173, proxies `/api` to the server).
+
+Stack: React 19, TypeScript, Tailwind 4 and Vite, served by FastAPI. Vite instead of Next.js
+keeps the install at ~135 MB and lets one `serve` command run the whole app.
+Chart colours come from a palette validated for colour-blind separation on the dark surface.
 
 ## Getting started
 
@@ -115,7 +136,8 @@ India-open remote) before it is stored.
 ## Layout
 
 ```
-backend/   SQLModel service and CLI (Python 3.11, uv)
+backend/   FastAPI + SQLModel service and CLI (Python 3.11, uv)
+frontend/  React dashboard (Vite, Tailwind)
   sources/   one module per source family, all implementing Source.fetch()
   pipeline   fetch → filter → de-duplicate → store → expire
 config/    search.yaml, watchlist.yaml
