@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 from sqlmodel import select
 
-from internradar.config import GmailAccount, GmailConfig
+from internradar.config import GmailAccount, GmailConfig, Settings
 from internradar.gmail.classify import classify
 from internradar.gmail.client import Email, html_to_text, parse_message
 from internradar.gmail.extract import (
@@ -14,6 +14,8 @@ from internradar.gmail.extract import (
     ExtractedOpportunity,
     Extraction,
     ExtractionError,
+    OpenAIExtractor,
+    build_extractor,
     validate,
 )
 from internradar.gmail.source import build_email_sources
@@ -261,3 +263,58 @@ def test_opportunity_closes_once_its_deadline_passes(session, search):
     _store(session, items=[_item(deadline=yesterday)], received=NOW - timedelta(days=5))
     run_fetch(session, build_email_sources(session, _config()), search)
     assert session.exec(select(Opportunity)).one().status == Lifecycle.CLOSED
+
+
+# --- OpenAI provider ------------------------------------------------------------------------
+
+
+class FakeOpenAI:
+    def __init__(self, parsed=None, refusal=None, finish_reason="stop"):
+        self.calls = []
+        message = SimpleNamespace(parsed=parsed, refusal=refusal)
+        self.response = SimpleNamespace(
+            choices=[SimpleNamespace(message=message, finish_reason=finish_reason)]
+        )
+        completions = SimpleNamespace(parse=self._parse)
+        self.chat = SimpleNamespace(completions=completions)
+
+    def _parse(self, **kwargs):
+        self.calls.append(kwargs)
+        return self.response
+
+
+def test_openai_extractor_validates_output_like_claude():
+    invented = opportunity(apply_url="https://evil.example/steal")
+    client = FakeOpenAI(parsed=Extraction(opportunities=[invented]))
+    [result] = OpenAIExtractor("gpt-5.4-mini", client).extract(email(body="no links here"))
+    assert result["apply_url"] is None
+    assert client.calls[0]["messages"][0]["role"] == "system"
+
+
+def test_openai_refusal_and_truncation_are_errors():
+    with pytest.raises(ExtractionError):
+        OpenAIExtractor("m", FakeOpenAI(refusal="no")).extract(email())
+    with pytest.raises(ExtractionError):
+        OpenAIExtractor("m", FakeOpenAI(finish_reason="length")).extract(email())
+
+
+@pytest.mark.parametrize(
+    ("env", "expected"),
+    [
+        ({"openai_api_key": "k"}, ("OpenAIExtractor", "gpt-5.4-mini")),
+        ({"anthropic_api_key": "k"}, ("ClaudeExtractor", "claude-opus-5")),
+        ({"openai_api_key": "k", "anthropic_api_key": "k", "llm_provider": "anthropic"},
+         ("ClaudeExtractor", "claude-opus-5")),
+        ({"openai_api_key": "k", "llm_model": "gpt-4.1-mini"}, ("OpenAIExtractor", "gpt-4.1-mini")),
+        ({}, None),
+    ],
+)  # fmt: skip
+def test_build_extractor_picks_provider_from_keys(env, expected):
+    settings = Settings.model_construct(
+        llm_provider=env.get("llm_provider", "auto"), llm_model=env.get("llm_model"),
+        openai_api_key=env.get("openai_api_key"), openai_base_url=None,
+        anthropic_api_key=env.get("anthropic_api_key"),
+    )  # fmt: skip
+    extractor = build_extractor(settings)
+    got = (type(extractor).__name__, extractor.model) if extractor else None
+    assert got == expected

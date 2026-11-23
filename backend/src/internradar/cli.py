@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta
 
-import anthropic
 import httpx
 import typer
 from rich.console import Console
@@ -18,7 +17,7 @@ from internradar.db import init_db, session_scope
 from internradar.funding.radar import funded_companies, make_client, run_radar
 from internradar.gmail import auth
 from internradar.gmail.client import GmailClient
-from internradar.gmail.extract import ClaudeExtractor
+from internradar.gmail.extract import build_extractor
 from internradar.gmail.source import build_email_sources
 from internradar.gmail.sync import SyncResult, sync_account
 from internradar.models import (
@@ -300,23 +299,17 @@ def gmail_status() -> None:
             )
     console.print(table)
     if not _llm_configured():
-        console.print(
-            "[yellow]![/] ANTHROPIC_API_KEY not set: emails are stored but not extracted."
-        )
+        console.print("[yellow]![/] No LLM API key in .env: emails are stored but not extracted.")
 
 
 def _llm_configured() -> bool:
-    return bool(get_settings().anthropic_api_key)
+    return build_extractor(get_settings()) is not None
 
 
 def _sync_inboxes() -> list[SyncResult]:
     settings = get_settings()
     config = load_gmail_config()
-    extractor = (
-        ClaudeExtractor(settings.llm_model, anthropic.Anthropic(api_key=settings.anthropic_api_key))
-        if _llm_configured()
-        else None
-    )
+    extractor = build_extractor(settings)
     results = []
     for account in config.accounts:
         if not auth.is_connected(account.label):

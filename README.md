@@ -69,7 +69,7 @@ uv run pytest
 ## Gmail (college + personal inbox)
 
 `fetch` also reads your connected inboxes. Cheap rules triage each email (job alert,
-placement mail, application update, other); only the first two go to Claude, which fills a
+placement mail, application update, other); only the first two go to an LLM (OpenAI or Claude), which fills a
 fixed schema: company, role, location, apply link, deadline, stipend and eligibility (CGPA,
 branches, batches, backlogs).
 
@@ -87,7 +87,7 @@ LinkedIn alert and the LinkedIn listing are one card, and a passed deadline clos
    *Test users*: add every Gmail address you will connect.
 4. *Credentials → Create credentials → OAuth client ID* → type **Desktop app** →
    download the JSON and save it as `data/google_client_secret.json`.
-5. `cp .env.example .env` and set `ANTHROPIC_API_KEY`.
+5. `cp .env.example .env` and set `OPENAI_API_KEY` (plus `OPENAI_BASE_URL` for a gateway) or `ANTHROPIC_API_KEY`.
 6. `uv run internradar gmail connect college` (and `personal`).
 
 The only scope requested is `gmail.readonly`. Tokens live in `data/tokens/` (git-ignored).

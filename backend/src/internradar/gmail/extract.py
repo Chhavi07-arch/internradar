@@ -1,4 +1,4 @@
-"""Extract opportunities from an email with Claude, then verify the result in code.
+"""Extract opportunities from an email with an LLM (OpenAI or Claude), then verify in code.
 
 Emails are untrusted input. The model only fills a fixed schema (no tools, nothing it says is
 executed), and every field that matters is checked against the email itself afterwards: an
@@ -10,8 +10,10 @@ from datetime import UTC, date, datetime
 from typing import Any, Protocol
 
 import anthropic
+import openai
 from pydantic import BaseModel, Field
 
+from internradar.config import Settings
 from internradar.gmail.client import Email
 from internradar.normalize import canonical_url
 
@@ -92,6 +94,28 @@ class ClaudeExtractor:
         return validate(response.parsed_output, email)
 
 
+class OpenAIExtractor:
+    def __init__(self, model: str, client: openai.OpenAI | None = None):
+        self.model = model
+        self.client = client or openai.OpenAI()
+
+    def extract(self, email: Email) -> list[dict[str, Any]]:
+        completion = self.client.chat.completions.parse(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": _render(email)},
+            ],
+            response_format=Extraction,
+        )
+        choice = completion.choices[0]
+        if choice.message.refusal:
+            raise ExtractionError("model declined to process this email")
+        if choice.finish_reason == "length" or choice.message.parsed is None:
+            raise ExtractionError(f"incomplete response (finish_reason={choice.finish_reason})")
+        return validate(choice.message.parsed, email)
+
+
 def _model_options(model: str) -> dict[str, Any]:
     if "haiku" in model:  # Haiku 4.5 takes neither effort nor server-side fallbacks
         return {}
@@ -155,3 +179,20 @@ def deadline_datetime(value: str | None) -> datetime | None:
         return None
     day = date.fromisoformat(value)
     return datetime(day.year, day.month, day.day, 18, 29, 59, tzinfo=UTC)
+
+
+DEFAULT_MODELS = {"openai": "gpt-5.4-mini", "anthropic": "claude-opus-5"}
+
+
+def build_extractor(settings: Settings) -> Extractor | None:
+    """The configured extractor, or None when no API key is set (emails then wait)."""
+    provider = settings.llm_provider
+    if provider == "auto":
+        provider = "openai" if settings.openai_api_key else "anthropic"
+    model = settings.llm_model or DEFAULT_MODELS[provider]
+    if provider == "openai" and settings.openai_api_key:
+        client = openai.OpenAI(api_key=settings.openai_api_key, base_url=settings.openai_base_url)
+        return OpenAIExtractor(model, client)
+    if provider == "anthropic" and settings.anthropic_api_key:
+        return ClaudeExtractor(model, anthropic.Anthropic(api_key=settings.anthropic_api_key))
+    return None

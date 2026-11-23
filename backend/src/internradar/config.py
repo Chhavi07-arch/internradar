@@ -16,9 +16,17 @@ class Settings(BaseSettings):
 
     config_dir: Path = REPO_ROOT / "config"
     data_dir: Path = REPO_ROOT / "data"
-    # Claude model for reading emails. claude-haiku-4-5 is ~5x cheaper if accuracy holds.
-    llm_model: str = "claude-opus-5"
-    # Read from the environment or the project's .env file; never committed.
+    # Which LLM reads emails. "auto" uses whichever API key is set (OpenAI first).
+    llm_provider: Literal["auto", "openai", "anthropic"] = "auto"
+    llm_model: str | None = None  # None: the provider's default below
+    # Keys come from the environment or the project's .env file; never committed.
+    openai_api_key: str | None = Field(
+        default=None, validation_alias=AliasChoices("OPENAI_API_KEY", "INTERNRADAR_OPENAI_API_KEY")
+    )
+    openai_base_url: str | None = Field(  # for OpenAI-compatible gateways
+        default=None,
+        validation_alias=AliasChoices("OPENAI_BASE_URL", "INTERNRADAR_OPENAI_BASE_URL"),
+    )
     anthropic_api_key: str | None = Field(
         default=None,
         validation_alias=AliasChoices("ANTHROPIC_API_KEY", "INTERNRADAR_ANTHROPIC_API_KEY"),
