@@ -133,6 +133,11 @@ reach the job boards. `internradar radar`:
 Every posting passes a relevance filter (whole-word "intern", tech role, Bengaluru or
 India-open remote) before it is stored.
 
+## Design
+
+The plan for v2 (multi-user, profile as the source of truth, Next.js) is in
+[docs/architecture.md](docs/architecture.md).
+
 ## Layout
 
 ```
