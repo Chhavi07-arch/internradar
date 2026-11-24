@@ -27,6 +27,8 @@ def get_engine() -> Engine:
 
 def init_db(engine: Engine | None = None) -> None:
     engine = engine or get_engine()
+    if engine.dialect.name != "sqlite":
+        raise RuntimeError("The current app supports SQLite only; migrate PostgreSQL with Alembic")
     SQLModel.metadata.create_all(engine)
     _add_missing_columns(engine)
 

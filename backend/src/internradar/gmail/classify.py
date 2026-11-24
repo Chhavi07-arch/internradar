@@ -5,6 +5,8 @@ import re
 from internradar.gmail.client import Email
 from internradar.models import EmailKind
 
+EXTRACTABLE = (EmailKind.JOB_ALERT, EmailKind.OPPORTUNITY)
+
 _ALERT_SENDERS = (
     "linkedin.com", "naukri.com", "internshala.com", "unstop.com", "indeed.com",
     "wellfound.com", "instahyre.com", "cutshort.io", "glassdoor.com", "foundit.in",

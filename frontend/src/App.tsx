@@ -29,7 +29,7 @@ const EMPTY_HINTS: Partial<Record<Route, string>> = {
   hidden: "Nothing hidden.",
 };
 
-export default function App() {
+export default function App({ onSignOut }: { onSignOut?: () => Promise<void> }) {
   const [route, navigate] = useRoute();
   const overview = useData(api.overview, []);
 
@@ -37,7 +37,7 @@ export default function App() {
     <div className="flex h-full">
       <Sidebar route={route} onNavigate={navigate} overview={overview.data} />
       <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
-        <TopBar route={route} lastRun={overview.data?.last_run_at ?? null} onFetched={overview.reload} />
+        <TopBar route={route} lastRun={overview.data?.last_run_at ?? null} onFetched={overview.reload} onSignOut={onSignOut} />
         <div className="mx-auto w-full max-w-6xl space-y-5 px-6 py-6">
           {overview.error && <ErrorNote message={overview.error} />}
           {route === "funding" ? (
@@ -61,7 +61,7 @@ export default function App() {
   );
 }
 
-function TopBar({ route, lastRun, onFetched }: { route: Route; lastRun: string | null; onFetched: () => void }) {
+function TopBar({ route, lastRun, onFetched, onSignOut }: { route: Route; lastRun: string | null; onFetched: () => void; onSignOut?: () => Promise<void> }) {
   const [running, setRunning] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -105,6 +105,7 @@ function TopBar({ route, lastRun, onFetched }: { route: Route; lastRun: string |
         <p className="hidden text-xs text-muted sm:block" aria-live="polite">
           {message ?? (running ? "Fetching every source… (2-3 min)" : `Last fetch ${timeAgo(lastRun)}`)}
         </p>
+        {onSignOut && <Button variant="outline" onClick={() => void onSignOut().catch((e: Error) => setMessage(e.message))}>Sign out</Button>}
         <Button variant="primary" onClick={start} disabled={running}>
           <RefreshCw className={running ? "size-4 animate-spin" : "size-4"} />
           {running ? "Fetching" : "Refresh"}

@@ -3,7 +3,7 @@ name = "internradar"
 version = "0.1.0"
 description = "One dashboard for every internship: college mail, personal mail, job boards and company career pages."
 authors = [
-    { name = "Chhavi07-arch", email = "chhavi.24bcs10201@sst.scaler.com" }
+    { name = "Chhavi07-arch" }
 ]
 requires-python = ">=3.11"
 dependencies = [
@@ -21,6 +21,11 @@ dependencies = [
     "openai>=3.57.0",
     "fastapi>=0.165.0",
     "uvicorn[standard]>=0.54.0",
+    "alembic>=1.20.1",
+    "psycopg[binary]>=3.3.9",
+    "cryptography>=50.0.2",
+    "authlib>=1.9.10",
+    "itsdangerous>=2.2.0",
 ]
 
 [project.scripts]

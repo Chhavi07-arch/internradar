@@ -20,7 +20,9 @@ from internradar.models import (
     Kind,
     Lifecycle,
     Opportunity,
+    OpportunityFields,
     Origin,
+    PublicOpportunity,
     Run,
     Sighting,
     SourceRun,
@@ -61,14 +63,18 @@ class RunSummary:
 def run_fetch(
     session: Session, sources: list[Source], search: SearchConfig, trigger: str = "cli"
 ) -> RunSummary:
+    public = session.get_bind().dialect.name == "postgresql"
+    model = PublicOpportunity if public else Opportunity
+    if public and any(s.origin == Origin.EMAIL or s.name.startswith("gmail:") for s in sources):
+        raise ValueError("Private inboxes cannot feed the public catalogue")
     now = utcnow()
     run = Run(started_at=now, trigger=trigger)
     session.add(run)
     session.flush()
     # "new" means new in the latest run, so last run's arrivals become ordinary.
     session.execute(
-        update(Opportunity)
-        .where(Opportunity.status == Lifecycle.NEW)
+        update(model)
+        .where(model.status == Lifecycle.NEW)
         .values(status=Lifecycle.ACTIVE)
         .execution_options(synchronize_session="fetch")
     )
@@ -80,7 +86,14 @@ def run_fetch(
     source_runs = []
     for result in results:
         kept = [p for p in result.postings if is_relevant(p, search)]
-        new = sum(_ingest(session, p, now) for p in kept)
+        if public and (
+            result.source.startswith("gmail:")
+            or any(
+                p.origin == Origin.EMAIL or p.source.startswith("gmail:") for p in result.postings
+            )
+        ):
+            raise ValueError("Private mail cannot feed the public catalogue")
+        new = sum(_ingest(session, p, now, model) for p in kept)
         if result.ok and result.exhaustive:
             _expire_missing(session, result.source, {p.native_id for p in result.postings}, now)
         source_run = SourceRun(
@@ -98,13 +111,15 @@ def run_fetch(
         source_runs.append(source_run)
 
     _expire_stale_board_listings(session, now)
-    _close_finished_opportunities(session, now)
+    _close_finished_opportunities(session, now, model)
     run.finished_at = utcnow()
     session.flush()
     return RunSummary(run_id=run.id, sources=source_runs)
 
 
-def _ingest(session: Session, posting: Posting, now: datetime) -> bool:
+def _ingest(
+    session: Session, posting: Posting, now: datetime, model: type[OpportunityFields]
+) -> bool:
     """Store one posting. Returns True if it created a new opportunity."""
     url = canonical_url(posting.url)
     sighting = session.exec(
@@ -117,13 +132,13 @@ def _ingest(session: Session, posting: Posting, now: datetime) -> bool:
         sighting.missed_runs = 0
         sighting.closed_at = None
         sighting.url = url or sighting.url
-        _merge(session.get_one(Opportunity, sighting.opportunity_id), posting, url, now)
+        _merge(session.get_one(model, sighting.opportunity_id), posting, url, now)
         return False
 
-    opportunity = _find_match(session, posting, url)
+    opportunity = _find_match(session, posting, url, model)
     created = opportunity is None
     if opportunity is None:
-        opportunity = _new_opportunity(posting, url, now)
+        opportunity = _new_opportunity(posting, url, now, model)
         session.add(opportunity)
         session.flush()
     else:
@@ -144,16 +159,18 @@ def _ingest(session: Session, posting: Posting, now: datetime) -> bool:
     return created
 
 
-def _find_match(session: Session, posting: Posting, url: str | None) -> Opportunity | None:
+def _find_match(
+    session: Session, posting: Posting, url: str | None, model: type[OpportunityFields]
+) -> OpportunityFields | None:
     if url:
         opportunity_id = session.exec(
             select(Sighting.opportunity_id).where(Sighting.url == url)
         ).first()
         if opportunity_id is not None:
-            return session.get(Opportunity, opportunity_id)
+            return session.get(model, opportunity_id)
 
     uid = fingerprint(posting.company, posting.title, posting.location)
-    if match := session.exec(select(Opportunity).where(Opportunity.uid == uid)).first():
+    if match := session.exec(select(model).where(model.uid == uid)).first():
         return match
 
     city = normalize_city(posting.location)
@@ -161,9 +178,7 @@ def _find_match(session: Session, posting: Posting, url: str | None) -> Opportun
     candidates = [
         o
         for o in session.exec(
-            select(Opportunity).where(
-                Opportunity.company_norm == normalize_company(posting.company)
-            )
+            select(model).where(model.company_norm == normalize_company(posting.company))
         )
         if o.city == city
     ]
@@ -173,9 +188,11 @@ def _find_match(session: Session, posting: Posting, url: str | None) -> Opportun
     return None
 
 
-def _new_opportunity(posting: Posting, url: str | None, now: datetime) -> Opportunity:
+def _new_opportunity(
+    posting: Posting, url: str | None, now: datetime, model: type[OpportunityFields]
+) -> OpportunityFields:
     city = normalize_city(posting.location)
-    return Opportunity(
+    return model(
         uid=fingerprint(posting.company, posting.title, posting.location),
         kind=Kind.INTERNSHIP
         if is_internship(posting.title, posting.flagged_internship)
@@ -193,7 +210,9 @@ def _new_opportunity(posting: Posting, url: str | None, now: datetime) -> Opport
     )
 
 
-def _merge(opportunity: Opportunity, posting: Posting, url: str | None, now: datetime) -> None:
+def _merge(
+    opportunity: OpportunityFields, posting: Posting, url: str | None, now: datetime
+) -> None:
     """Fold a new sighting into an opportunity.
 
     A more authoritative origin (company ATS beats a board, which beats an email) overwrites
@@ -243,19 +262,21 @@ def _expire_stale_board_listings(session: Session, now: datetime) -> None:
     )
 
 
-def _close_finished_opportunities(session: Session, now: datetime) -> None:
+def _close_finished_opportunities(
+    session: Session, now: datetime, model: type[OpportunityFields]
+) -> None:
     """Closed when every source stopped listing it, or when its deadline has passed."""
     session.flush()
     has_open_sighting = (
         select(Sighting.id)
-        .where(Sighting.opportunity_id == Opportunity.id, Sighting.closed_at.is_(None))
+        .where(Sighting.opportunity_id == model.id, Sighting.closed_at.is_(None))
         .exists()
     )
     session.execute(
-        update(Opportunity)
+        update(model)
         .where(
-            Opportunity.status != Lifecycle.CLOSED,
-            ~has_open_sighting | (col(Opportunity.deadline_at) < now),
+            model.status != Lifecycle.CLOSED,
+            ~has_open_sighting | (col(model.deadline_at) < now),
         )
         .values(status=Lifecycle.CLOSED)
         .execution_options(synchronize_session="fetch")

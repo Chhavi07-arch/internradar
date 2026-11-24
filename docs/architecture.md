@@ -1,5 +1,10 @@
 # InternRadar v2: a multi-user, self-updating career system
 
+> **Current direction:** Public signup does not depend on Gmail. Direct Gmail OAuth is the
+> long-term primary integration and forwarding is the launch alternative and ongoing backup.
+> Both use the same private pipeline. Next.js is an option, not a commitment; the current UI
+> stays for Phase A. See [the Phase A checkpoint](phase-a.md) for actual implementation status.
+
 Status: **proposal for review** (2026-11-24). Nothing here is built yet.
 
 ## Goal

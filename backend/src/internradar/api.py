@@ -162,6 +162,10 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         with Session(app.state.engine) as s:
             yield s
 
+    @app.get("/api/session")
+    def local_session() -> dict[str, bool]:
+        return {"local": True}
+
     @app.get("/api/overview", response_model=Overview)
     def overview(s: Session = Depends(session)) -> Overview:  # noqa: B008
         now = utcnow()
@@ -421,7 +425,8 @@ def _stipend(o: Opportunity) -> str | None:
         return None
     low, high = o.stipend_min, o.stipend_max
     is_range = low and high and low != high
-    amount = f"{low:,.0f} - {high:,.0f}" if is_range else f"{low or high:,.0f}"
+    single = low if low is not None else high
+    amount = f"{low:,.0f} - {high:,.0f}" if is_range else f"{single:,.0f}"
     return " ".join(p for p in (o.currency, amount, o.pay_period and f"/ {o.pay_period}") if p)
 
 

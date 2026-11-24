@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import typer
 from rich.console import Console
@@ -17,6 +18,7 @@ from internradar.gmail import auth
 from internradar.gmail.client import GmailClient
 from internradar.gmail.extract import build_extractor
 from internradar.gmail.sync import SyncResult
+from internradar.legacy_audit import audit_legacy
 from internradar.models import (
     EmailKind,
     EmailMessage,
@@ -35,6 +37,18 @@ app = typer.Typer(help="InternRadar: one dashboard for every internship.", no_ar
 gmail_app = typer.Typer(help="Connect and sync inboxes (read-only).", no_args_is_help=True)
 app.add_typer(gmail_app, name="gmail")
 console = Console()
+
+
+@app.command("audit-legacy")
+def audit_legacy_db(path: Path) -> None:
+    """Inventory an SQLite backup before migration. No records are copied."""
+    result = audit_legacy(path)
+    console.print(f"Public candidates: {result.public_candidates}")
+    console.print(f"Private or unproven: {result.private_or_unproven}")
+    console.print(
+        f"Private or unproven with user state: {result.private_or_unproven_with_user_state}"
+    )
+    console.print(f"Stored mail: {result.stored_mail}")
 
 
 @app.command()

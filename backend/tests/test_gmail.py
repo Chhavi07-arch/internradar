@@ -185,7 +185,7 @@ COLLEGE = GmailAccount(label="college", query="intern", trusted=True)
 
 def test_sync_downloads_and_extracts_each_email_once(session):
     gmail = FakeGmail([email(body="https://forms.gle/abc123"),
-                       email(subject="Dinner?", gmail_id="m2")])  # fmt: skip
+                       email(subject="Dinner?", body="private plans", gmail_id="m2")])  # fmt: skip
     extractor = FakeExtractor()
     first = sync_account(session, COLLEGE, gmail, extractor, 30)
     second = sync_account(session, COLLEGE, gmail, extractor, 30)
@@ -193,6 +193,7 @@ def test_sync_downloads_and_extracts_each_email_once(session):
     assert (first.new, first.extracted, first.opportunities) == (2, 1, 1)
     assert (second.new, second.extracted) == (0, 0)
     assert gmail.downloads == 2 and extractor.calls == 1
+    assert all(not row.body for row in session.exec(select(EmailMessage)))
 
 
 def test_without_api_key_emails_wait_and_are_extracted_later(session):

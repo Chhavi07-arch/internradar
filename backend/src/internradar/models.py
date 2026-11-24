@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import JSON, Column, Text, UniqueConstraint
+from sqlalchemy import JSON, Column, MetaData, Text, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 
@@ -42,7 +42,7 @@ class Lifecycle(StrEnum):
     CLOSED = "closed"  # every source has stopped listing it
 
 
-class Opportunity(SQLModel, table=True):
+class OpportunityFields(SQLModel):
     id: int | None = Field(default=None, primary_key=True)
     uid: str = Field(unique=True, index=True, description="normalize.fingerprint()")
     kind: Kind = Kind.INTERNSHIP
@@ -57,7 +57,7 @@ class Opportunity(SQLModel, table=True):
 
     url: str | None = None
     apply_url: str | None = None
-    description: str | None = Field(default=None, sa_column=Column(Text))
+    description: str | None = Field(default=None, sa_type=Text)
     stipend_min: float | None = None
     stipend_max: float | None = None
     currency: str | None = None
@@ -65,12 +65,21 @@ class Opportunity(SQLModel, table=True):
     posted_at: datetime | None = None
     deadline_at: datetime | None = None
     # {"min_cgpa": 7.0, "branches": ["CSE"], "batches": [2028], "backlogs_allowed": false, ...}
-    eligibility: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
+    eligibility: dict[str, Any] | None = Field(default=None, sa_type=JSON)
 
     primary_origin: Origin
     status: Lifecycle = Field(default=Lifecycle.NEW, index=True)
     first_seen_at: datetime = Field(default_factory=utcnow, index=True)
     last_seen_at: datetime = Field(default_factory=utcnow)
+
+
+class PublicOpportunity(OpportunityFields, table=True):
+    __tablename__ = "opportunity"
+    metadata = MetaData()
+
+
+class Opportunity(OpportunityFields, table=True):
+    """Legacy SQLite table; local-only until the API cutover."""
 
     # user state
     seen_at: datetime | None = None  # opened in the dashboard; unset means "unread"
@@ -167,6 +176,7 @@ class EmailMessage(SQLModel, table=True):
     received_at: datetime = Field(index=True)
     kind: EmailKind = Field(index=True)
     body: str = Field(sa_column=Column(Text))
+    raw_expires_at: datetime | None = None
 
     # Opportunities extracted by the LLM, already validated against the email text.
     extracted: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSON))

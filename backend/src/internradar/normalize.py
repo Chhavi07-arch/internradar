@@ -103,13 +103,18 @@ def canonical_url(url: str | None) -> str | None:
     """Strip tracking params and fragments so two links to one posting compare equal."""
     if not url:
         return None
-    parts = urlsplit(url.strip())
-    if parts.scheme not in ("http", "https") or not parts.netloc:
+    try:
+        parts = urlsplit(url.strip())
+    except ValueError:
+        return None
+    if parts.scheme not in ("http", "https") or not parts.hostname or parts.username is not None:
         return None
     host = parts.netloc.lower().removeprefix("www.")
     path = parts.path.rstrip("/")
 
-    if host.endswith("linkedin.com") and (m := _LINKEDIN_JOB.search(path)):
+    if (host == "linkedin.com" or host.endswith(".linkedin.com")) and (
+        m := _LINKEDIN_JOB.search(path)
+    ):
         return f"https://www.linkedin.com/jobs/view/{m.group(1)}"
 
     query = sorted(

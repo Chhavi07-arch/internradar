@@ -8,17 +8,17 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import timedelta
 
+from sqlalchemy import update
 from sqlmodel import Session, col, select
 
 from internradar.config import GmailAccount
-from internradar.gmail.classify import classify
+from internradar.gmail.classify import EXTRACTABLE, classify
 from internradar.gmail.client import Email, GmailClient
 from internradar.gmail.extract import Extractor
-from internradar.models import EmailKind, EmailMessage, utcnow
+from internradar.models import EmailMessage, utcnow
 
 MAX_PARALLEL_DOWNLOADS = 6
 MAX_PARALLEL_EXTRACTIONS = 4
-_EXTRACTABLE = (EmailKind.JOB_ALERT, EmailKind.OPPORTUNITY)
 
 
 @dataclass
@@ -39,6 +39,29 @@ def sync_account(
     extractor: Extractor | None,
     lookback_days: int,
 ) -> SyncResult:
+    now = utcnow()
+    session.execute(
+        update(EmailMessage)
+        .where(
+            EmailMessage.account == account.label,
+            (col(EmailMessage.raw_expires_at) <= now)
+            | (col(EmailMessage.extracted_at).is_not(None) & (col(EmailMessage.body) != ""))
+            | (col(EmailMessage.kind).not_in(EXTRACTABLE) & (col(EmailMessage.body) != "")),
+        )
+        .values(body="", raw_expires_at=None)
+    )
+    # Give pre-upgrade pending mail one bounded retry window.
+    session.execute(
+        update(EmailMessage)
+        .where(
+            EmailMessage.account == account.label,
+            col(EmailMessage.extracted_at).is_(None),
+            col(EmailMessage.raw_expires_at).is_(None),
+            col(EmailMessage.kind).in_(EXTRACTABLE),
+            col(EmailMessage.body) != "",
+        )
+        .values(raw_expires_at=now + timedelta(days=7))
+    )
     result = SyncResult(account=account.label)
     ids = gmail.list_ids(f"{account.query} newer_than:{lookback_days}d")
     result.listed = len(ids)
@@ -64,8 +87,9 @@ def sync_account(
     pending = session.exec(
         select(EmailMessage).where(
             EmailMessage.account == account.label,
-            col(EmailMessage.kind).in_(_EXTRACTABLE),
+            col(EmailMessage.kind).in_(EXTRACTABLE),
             col(EmailMessage.extracted_at).is_(None),
+            col(EmailMessage.raw_expires_at) > now,
             EmailMessage.received_at >= utcnow() - timedelta(days=lookback_days),
         )
     ).all()
@@ -81,6 +105,8 @@ def sync_account(
             result.pending += 1
             continue
         row.extracted, row.extracted_at, row.extract_error = opportunities, utcnow(), None
+        row.body = ""
+        row.raw_expires_at = None
         result.extracted += 1
         result.opportunities += len(opportunities)
     session.flush()
@@ -95,6 +121,7 @@ def _try(fn, arg):
 
 
 def _to_row(account: str, email: Email) -> EmailMessage:
+    kind = classify(email)
     return EmailMessage(
         account=account,
         gmail_id=email.gmail_id,
@@ -102,8 +129,9 @@ def _to_row(account: str, email: Email) -> EmailMessage:
         sender=email.sender,
         subject=email.subject,
         received_at=email.received_at,
-        kind=classify(email),
-        body=email.body,
+        kind=kind,
+        body=email.body if kind in EXTRACTABLE else "",
+        raw_expires_at=utcnow() + timedelta(days=7) if kind in EXTRACTABLE else None,
     )
 
 
