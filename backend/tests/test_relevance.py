@@ -39,6 +39,7 @@ def test_source_flag_counts_as_internship():
         ("AI Product Management Internship", False),
         ("Data Analyst Intern", True),
         ("QA Engineer Intern", True),
+        ("Technology Program Intern", True),
     ],
 )
 def test_is_tech(title, expected):

@@ -15,7 +15,7 @@ _INTERN = re.compile(r"\b(intern|interns|internship|internships|trainee|apprenti
 
 _TECH = re.compile(
     r"\b("
-    r"engineer\w*|developer|software|sde|swe|programmer|"
+    r"engineer\w*|developer|software|sde|swe|programmer|tech|technology|"
     r"backend|back[- ]end|frontend|front[- ]end|full[- ]?stack|web|mobile|android|ios|"
     r"data|ml|machine learning|ai|artificial intelligence|gen ?ai|llm|nlp|"
     r"computer vision|deep learning|research|scientist|"
