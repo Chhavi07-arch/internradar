@@ -8,6 +8,8 @@ RUN npm run build
 FROM eclipse-temurin:25.0.2_10-jdk AS java-build
 WORKDIR /workspace/backend
 COPY backend/ ./
+# Verify the wrapper before execution, independently of the build image's download tools.
+ADD --checksum=sha256:4e2fbf6554bc8a4702cdfdd3bef464f423393d784ddbb037216320ce55d5e4e1 https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-wrapper/3.3.4/maven-wrapper-3.3.4.jar .mvn/wrapper/maven-wrapper.jar
 RUN chmod +x mvnw
 
 FROM java-build AS web-build
