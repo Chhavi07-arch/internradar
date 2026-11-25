@@ -20,8 +20,8 @@ export function useData<T>(load: () => Promise<T>, deps: unknown[]) {
   return { data, setData, error, reload };
 }
 
-export type Route = "inbox" | "saved" | "deadlines" | "hidden" | "funding" | "sources";
-const ROUTES: Route[] = ["inbox", "saved", "deadlines", "hidden", "funding", "sources"];
+export type Route = "inbox" | "saved" | "deadlines" | "hidden" | "funding" | "sources" | "profile" | "admin";
+const ROUTES: Route[] = ["inbox", "saved", "deadlines", "hidden", "funding", "sources", "profile", "admin"];
 
 /** Tiny hash router: #/funding etc. Survives reloads, no dependency. */
 export function useRoute(): [Route, (route: Route) => void] {

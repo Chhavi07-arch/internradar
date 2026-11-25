@@ -32,7 +32,7 @@ def engine():
             revision = conn.scalar(text("SELECT version_num FROM alembic_version"))
             if revision in {"0002_private_ownership", "0003_auth"}:
                 pytest.skip("scheduler tests require 0004_scheduler")
-            assert revision == "0004_scheduler"
+            assert revision in {"0004_scheduler", "0005_profile", "0006_admin"}
             assert not conn.scalar(
                 text("""
                 SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = current_user

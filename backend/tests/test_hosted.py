@@ -42,10 +42,13 @@ def test_sessions_and_profiles_are_independent(hosted):
     _, app, _, (alice, bob) = hosted
     anonymous = TestClient(app, base_url=ORIGIN)
     assert anonymous.get("/api/overview").status_code == 401
-    assert alice.get("/api/session").json() == {"role": "customer"}
+    assert alice.get("/api/session").json()["role"] == "customer"
     assert alice.put("/api/profile", json={"name": "Alice", "batch": 2028}).status_code == 200
     assert alice.get("/api/profile").json()["name"] == "Alice"
-    assert bob.get("/api/profile").json() == {}
+    assert bob.get("/api/profile").json()["name"] == ""
+    assert bob.post("/api/profile/skip").json()["onboarding_state"] == "skipped"
+    assert bob.get("/api/profile").json()["onboarding_state"] == "skipped"
+    assert alice.post("/api/profile/skip").json()["onboarding_state"] == "completed"
     assert bob.put("/api/profile", json={"role": "admin"}).status_code == 422
     assert alice.post("/auth/logout", headers={"Origin": "https://other.test"}).status_code == 403
     old_token = alice.cookies.get(COOKIE)
@@ -136,3 +139,38 @@ def test_sign_in_replaces_previous_session(hosted):
     with pytest.raises(HTTPException) as exc:
         principal_for(engine, old)
     assert exc.value.status_code == 401
+
+
+def test_local_http_requires_explicit_localhost_origin():
+    for origin, opt_in in [
+        ("http://localhost:8448", False),
+        ("http://internradar.test:8448", True),
+        ("http://localhost:8448/", True),
+        ("http://localhost", True),
+    ]:
+        with pytest.raises(ValueError, match="explicitly enable local HTTP"):
+            create_hosted_app(settings=WebSettings(origin, "test", "test", "x" * 48, opt_in))
+
+
+def test_local_http_checks_peer_host_and_origin(hosted):
+    engine, _, _, (alice, _) = hosted
+    origin = "http://localhost:8448"
+    settings = WebSettings(origin, "test", "test", "x" * 48, local_http=True)
+    app = create_hosted_app(engine, settings)
+    token = alice.cookies.get(COOKIE)
+    with TestClient(app, base_url=origin, client=("127.0.0.1", 50000)) as loopback:
+        assert loopback.get("/api/session").status_code == 401
+        loopback.cookies.set(settings.session_cookie, token)
+        assert loopback.get("/api/session").status_code == 200
+        assert loopback.get("/api/session", headers={"Host": "other.test"}).status_code == 403
+        assert (
+            loopback.get("/api/session", headers={"X-Forwarded-For": "127.0.0.1"}).status_code
+            == 403
+        )
+        assert loopback.post("/auth/logout").status_code == 403
+        response = loopback.post("/auth/logout", headers={"Origin": origin})
+        assert response.status_code == 204
+        assert "HttpOnly" in response.headers["set-cookie"]
+        assert loopback.get("/api/session").status_code == 401
+    with TestClient(app, base_url=origin, client=("192.0.2.1", 50000)) as remote:
+        assert remote.get("/api/session").status_code == 403

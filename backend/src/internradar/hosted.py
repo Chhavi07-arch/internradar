@@ -2,21 +2,37 @@
 
 import os
 from datetime import timedelta
+from ipaddress import ip_address
 from types import SimpleNamespace
+from typing import Annotated, Literal
 from urllib.parse import urlsplit
+from uuid import UUID
 
 from fastapi import FastAPI, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import Engine, create_engine, text
 from sqlmodel import select
 
 from internradar import api
+from internradar.admin import install_admin, verify_web_account_acl
 from internradar.gmail.extract import deadline_datetime
 from internradar.models import FundingEvent, FundingMention, Lifecycle, Origin, utcnow
 from internradar.normalize import canonical_url, normalize_city
 from internradar.ownership import owner_session
 from internradar.user_state import update_state
-from internradar.web_auth import COOKIE, WebSettings, install_sign_in, principal_for
+from internradar.web_auth import WebSettings, install_sign_in, principal_for
+
+
+class ProfileProject(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    id: UUID
+    name: str = Field(min_length=1, max_length=140)
+    description: str = Field(default="", max_length=1000)
+
+
+ProfileTag = Annotated[str, Field(min_length=1, max_length=100)]
 
 
 class ProfileData(BaseModel):
@@ -26,7 +42,26 @@ class ProfileData(BaseModel):
     college: str = Field(default="", max_length=180)
     branch: str = Field(default="", max_length=100)
     batch: int | None = Field(default=None, ge=2000, le=2100)
-    roles: list[str] = Field(default_factory=list, max_length=25)
+    degree: str = Field(default="", max_length=120)
+    roles: list[ProfileTag] = Field(default_factory=list, max_length=25)
+    skills: list[ProfileTag] = Field(default_factory=list, max_length=50)
+    projects: list[ProfileProject] = Field(default_factory=list, max_length=20)
+
+    @model_validator(mode="after")
+    def unique_project_ids(self):
+        if len({project.id for project in self.projects}) != len(self.projects):
+            raise ValueError("project IDs must be unique")
+        return self
+
+
+class ProfileResponse(ProfileData):
+    onboarding_state: Literal["pending", "skipped", "completed"]
+
+
+def _profile_output(row):
+    if row is None:
+        raise HTTPException(401, "Sign in required")
+    return ProfileResponse(**row.data, onboarding_state=row.onboarding_state)
 
 
 def _cards(session, owner, ident=None):
@@ -163,19 +198,22 @@ def create_hosted_app(engine: Engine | None = None, settings: WebSettings | None
                     "SIGNIN_CLIENT_SECRET",
                     "SIGNIN_STATE_SECRET",
                 )
-            ]
+            ],
+            local_http=os.getenv("INTERNRADAR_LOCAL_HTTP") == "1",
         )
     origin = urlsplit(settings.origin)
+    expected_scheme = "http" if settings.local_http else "https"
     if (
-        origin.scheme != "https"
+        origin.scheme != expected_scheme
         or not origin.hostname
-        or origin.username
-        or origin.path
-        or origin.query
-        or origin.fragment
+        or origin.username is not None
+        or settings.origin != f"{origin.scheme}://{origin.netloc}"
         or len(settings.state_secret) < 32
+        or (
+            settings.local_http and (not origin.port or origin.netloc != f"localhost:{origin.port}")
+        )
     ):
-        raise ValueError("Configure an HTTPS origin and a strong session state secret")
+        raise ValueError("Use HTTPS, or explicitly enable local HTTP with http://localhost:<port>")
     engine = engine or create_engine(os.environ["INTERNRADAR_WEB_DATABASE_URL"], pool_pre_ping=True)
     if engine.dialect.name != "postgresql":
         raise ValueError("Hosted API requires PostgreSQL")
@@ -194,15 +232,21 @@ def create_hosted_app(engine: Engine | None = None, settings: WebSettings | None
             is not False
         ):
             raise RuntimeError("Hosted API requires a non-owner runtime login without RLS bypass")
+        if not settings.local_http:
+            verify_web_account_acl(conn)
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
     @app.middleware("http")
     async def prevent_cross_origin_writes(request: Request, call_next):
+        if settings.local_http and (
+            not _loopback_peer(request)
+            or request.headers.getlist("host") != [origin.netloc]
+            or request.url.scheme != "http"
+        ):
+            return JSONResponse({"detail": "Local sign-in requires localhost"}, status_code=403)
         if request.method not in {"GET", "HEAD", "OPTIONS"} and (
             request.headers.get("origin") != settings.origin
         ):
-            from fastapi.responses import JSONResponse
-
             return JSONResponse({"detail": "Origin not permitted"}, status_code=403)
         response = await call_next(request)
         if request.url.path.startswith(("/api/", "/auth/")):
@@ -210,14 +254,15 @@ def create_hosted_app(engine: Engine | None = None, settings: WebSettings | None
         return response
 
     install_sign_in(app, engine, settings)
+    install_admin(app, engine, settings)
 
     def owner(request: Request):
-        return principal_for(engine, request.cookies.get(COOKIE)).id
+        return principal_for(engine, request.cookies.get(settings.session_cookie)).id
 
     @app.get("/api/session")
     def session_info(request: Request):
-        principal = principal_for(engine, request.cookies.get(COOKIE))
-        return {"role": principal.role}
+        principal = principal_for(engine, request.cookies.get(settings.session_cookie))
+        return {"role": principal.role, "account_ref": str(principal.id)}
 
     @app.get("/api/opportunities", response_model=list[api.OpportunityOut])
     def listings(
@@ -389,30 +434,40 @@ def create_hosted_app(engine: Engine | None = None, settings: WebSettings | None
         owner(request)
         return fetch_status(request)  # hosted refresh reloads the scheduled feed
 
-    @app.get("/api/profile")
+    @app.get("/api/profile", response_model=ProfileResponse)
     def profile(request: Request):
         user = owner(request)
         with owner_session(engine, user) as session:
-            result = session.execute(
-                text("SELECT data FROM student_profile WHERE owner_user_id = :owner"),
+            row = session.execute(
+                text("""SELECT data, onboarding_state FROM student_profile
+                        WHERE owner_user_id = :owner"""),
                 {"owner": user},
-            ).scalar_one_or_none()
-            if result is None:
-                raise HTTPException(401, "Sign in required")
-            return result
+            ).one_or_none()
+            return _profile_output(row)
 
-    @app.put("/api/profile", response_model=ProfileData)
+    @app.put("/api/profile", response_model=ProfileResponse)
     def update_profile(request: Request, profile: ProfileData):
         user = owner(request)
         with owner_session(engine, user) as session:
-            result = session.execute(
-                text("""UPDATE student_profile SET data = CAST(:data AS json)
-                    WHERE owner_user_id = :owner"""),
+            row = session.execute(
+                text("""UPDATE student_profile SET data = CAST(:data AS json),
+                    onboarding_state = 'completed' WHERE owner_user_id = :owner
+                    RETURNING data, onboarding_state"""),
                 {"data": profile.model_dump_json(), "owner": user},
-            )
-            if result.rowcount != 1:
-                raise HTTPException(401, "Sign in required")
-        return profile
+            ).one_or_none()
+            return _profile_output(row)
+
+    @app.post("/api/profile/skip", response_model=ProfileResponse)
+    def skip_profile(request: Request):
+        user = owner(request)
+        with owner_session(engine, user) as session:
+            row = session.execute(
+                text("""UPDATE student_profile SET onboarding_state = CASE
+                    WHEN onboarding_state = 'pending' THEN 'skipped' ELSE onboarding_state END
+                    WHERE owner_user_id = :owner RETURNING data, onboarding_state"""),
+                {"owner": user},
+            ).one_or_none()
+            return _profile_output(row)
 
     api._mount_frontend(app)
     return app
@@ -438,3 +493,14 @@ def _write_card(session, user, ident, changes):
         WHERE owner_user_id = :owner AND id = :id"""),
         changes | {"owner": user, "id": -ident},
     )
+
+
+def _loopback_peer(request: Request) -> bool:
+    if request.client is None or any(
+        name == "forwarded" or name.startswith("x-forwarded-") for name in request.headers
+    ):
+        return False
+    try:
+        return ip_address(request.client.host).is_loopback
+    except ValueError:
+        return False

@@ -38,6 +38,8 @@ def runtime():
                 "0002_private_ownership",
                 "0003_auth",
                 "0004_scheduler",
+                "0005_profile",
+                "0006_admin",
             }
             assert not conn.scalar(
                 text("""

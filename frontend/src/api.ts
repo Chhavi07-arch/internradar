@@ -1,4 +1,5 @@
 // Mirrors the response models in backend/src/internradar/api.py.
+import type { ProfileFields, StudentProfile } from "./profile";
 
 export type Origin = "ats" | "list" | "board" | "email";
 export type View = "inbox" | "all" | "saved" | "deadlines" | "hidden";
@@ -113,12 +114,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!response.ok) {
     const body = await response.json().catch(() => null);
-    throw new Error(body?.detail ?? `${response.status} ${response.statusText}`);
+    throw new Error(typeof body?.detail === "string" ? body.detail : response.status === 422
+      ? "Some fields are invalid. Check your entries and try again."
+      : `${response.status} ${response.statusText}`);
   }
   return response.json() as Promise<T>;
 }
 
 export const api = {
+  profile: () => request<Partial<StudentProfile>>("/api/profile"),
+  saveProfile: (fields: ProfileFields) => request<StudentProfile>("/api/profile", { method: "PUT", body: JSON.stringify(fields) }),
+  skipProfile: () => request<StudentProfile>("/api/profile/skip", { method: "POST" }),
   overview: () => request<Overview>("/api/overview"),
   opportunities: (view: View, q: string, origin: Origin | null) => {
     const params = new URLSearchParams({ view });

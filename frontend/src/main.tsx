@@ -4,16 +4,20 @@ import App from "./App";
 import "./index.css";
 
 function SessionGate() {
-  const [state, setState] = useState<"checking" | "local" | "signed-in" | "signed-out" | "error">("checking");
+  const [state, setState] = useState<"checking" | "local" | "student" | "admin" | "signed-out" | "error">("checking");
   useEffect(() => {
-    fetch("/api/session").then(async (response) => {
+    const controller = new AbortController();
+    fetch("/api/session", { signal: controller.signal }).then(async (response) => {
       if (response.status === 401) setState("signed-out");
-      else if (response.ok) setState((await response.json()).local ? "local" : "signed-in");
-      else setState("error");
-    }).catch(() => setState("error"));
+      else if (response.ok) {
+        const session = await response.json();
+        if (!controller.signal.aborted) setState(session.local === true ? "local" : session.role === "admin" ? "admin" : "student");
+      } else setState("error");
+    }).catch(() => { if (!controller.signal.aborted) setState("error"); });
+    return () => controller.abort();
   }, []);
   if (state === "local") return <App />;
-  if (state === "signed-in") return <App onSignOut={async () => {
+  if (state === "student" || state === "admin") return <App hostedRole={state} onSignOut={async () => {
     const response = await fetch("/auth/logout", { method: "POST" });
     if (!response.ok) throw new Error("Sign-out failed");
     setState("signed-out");

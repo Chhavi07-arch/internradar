@@ -12,7 +12,7 @@ export function Card({ children, className }: { children: ReactNode; className?:
 
 export function CardHeader({ title, hint, right }: { title: string; hint?: string; right?: ReactNode }) {
   return (
-    <header className="flex items-center justify-between gap-4 border-b border-line px-5 py-3.5">
+    <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-3.5">
       <div>
         <h2 className="text-sm font-semibold text-ink">{title}</h2>
         {hint && <p className="mt-0.5 text-xs text-muted">{hint}</p>}
@@ -53,7 +53,7 @@ export function Button({
       className={cx(
         "inline-flex items-center justify-center gap-2 rounded-lg text-sm font-medium transition-colors",
         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-50",
-        variant === "primary" && "bg-accent px-3.5 py-2 text-white hover:bg-[#4d95ea]",
+        variant === "primary" && "bg-accent px-3.5 py-2 text-white hover:bg-[#3053bd]",
         variant === "outline" && "border border-line px-3 py-1.5 text-ink-2 hover:bg-raised hover:text-ink",
         variant === "ghost" && "p-1.5 text-muted hover:bg-raised hover:text-ink",
         className,

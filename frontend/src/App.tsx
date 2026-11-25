@@ -1,7 +1,10 @@
-import { CheckCheck, RefreshCw, Search } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { ArrowDownRight, CheckCheck, RefreshCw, Search } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Opportunity, Origin, View } from "./api";
 import { api } from "./api";
+import { AdminDashboard } from "./components/AdminDashboard";
+import { ProfileWorkspace } from "./components/ProfileWorkspace";
+import { normalizeProfile } from "./profile";
 import { DailyChart } from "./components/DailyChart";
 import { FundingTable } from "./components/FundingTable";
 import { OpportunityDrawer } from "./components/OpportunityDrawer";
@@ -20,6 +23,8 @@ const TITLES: Record<Route, { title: string; hint: string }> = {
   hidden: { title: "Hidden", hint: "Internships you marked as not interested." },
   funding: { title: "Funding radar", hint: "Startups that just raised money usually start hiring within weeks." },
   sources: { title: "Sources", hint: "The latest result from every job board, careers board and inbox." },
+  profile: { title: "Profile", hint: "Your student details, skills and projects." },
+  admin: { title: "Admin", hint: "InternRadar system metrics." },
 };
 
 const EMPTY_HINTS: Partial<Record<Route, string>> = {
@@ -29,30 +34,57 @@ const EMPTY_HINTS: Partial<Record<Route, string>> = {
   hidden: "Nothing hidden.",
 };
 
-export default function App({ onSignOut }: { onSignOut?: () => Promise<void> }) {
-  const [route, navigate] = useRoute();
+export default function App({ hostedRole, onSignOut }: { hostedRole?: "student" | "admin"; onSignOut?: () => Promise<void> }) {
+  const [requested, navigate] = useRoute();
   const overview = useData(api.overview, []);
+  const profile = useData(async () => hostedRole ? normalizeProfile(await api.profile()) : null, [hostedRole]);
+  const onboarding = profile.data?.onboarding_state === "pending";
+  const availableRoute = (requested === "admin" && hostedRole !== "admin") || (requested === "profile" && !hostedRole) ? "inbox" : requested;
+  const route = onboarding ? "profile" : availableRoute;
+  const waiting = !!hostedRole && !profile.data && !profile.error;
+  const profileError = !!hostedRole && !profile.data && profile.error;
+  const mainRef = useRef<HTMLElement>(null);
+  useEffect(() => { mainRef.current?.scrollTo(0, 0); }, [route, onboarding]);
 
   return (
-    <div className="flex h-full">
-      <Sidebar route={route} onNavigate={navigate} overview={overview.data} />
-      <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
-        <TopBar route={route} lastRun={overview.data?.last_run_at ?? null} onFetched={overview.reload} onSignOut={onSignOut} />
-        <div className="mx-auto w-full max-w-6xl space-y-5 px-6 py-6">
-          {overview.error && <ErrorNote message={overview.error} />}
-          {route === "funding" ? (
+    <div className="flex h-full flex-col md:flex-row">
+      {!onboarding && !waiting && <Sidebar route={route} onNavigate={navigate} overview={overview.data} hostedRole={hostedRole} />}
+      <main ref={mainRef} className="flex min-w-0 flex-1 flex-col overflow-y-auto">
+        <TopBar route={waiting ? "profile" : route} lastRun={overview.data?.last_run_at ?? null} onFetched={overview.reload} onSignOut={onSignOut} hosted={!!hostedRole} />
+        <div className="mx-auto w-full max-w-6xl space-y-5 px-4 py-5 sm:px-6 sm:py-6">
+          {waiting ? <p role="status" className="text-sm text-ink-2">Loading profile…</p>
+          : (route === "profile" || route === "admin") && profileError ? (
+            <Card className="space-y-3 p-4">
+              <p role="alert" className="text-sm text-[#f08080]">Could not load your profile: {profileError}</p>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={profile.reload}>Retry</Button>
+                <Button onClick={() => navigate("inbox")}>Back to inbox</Button>
+              </div>
+            </Card>
+          ) : route === "profile" && profile.data ? (
+            <ProfileWorkspace profile={profile.data} onboarding={onboarding} onBack={() => navigate("inbox")} onSaved={(updated) => {
+              profile.setData(updated);
+              if (onboarding) navigate("inbox");
+            }} onSkipped={(updated) => {
+              profile.setData(updated);
+              navigate("inbox");
+            }} />
+          ) : route === "admin" ? <AdminDashboard />
+          : route === "funding" ? (
             <FundingPage />
           ) : route === "sources" ? (
             <SourcesPage />
           ) : (
             <>
-              {route === "inbox" && overview.data && (
-                <>
-                  <StatTiles overview={overview.data} />
-                  <DailyChart days={overview.data.per_day} />
-                </>
+              {route === "inbox" && <Discovery overview={overview.data} />}
+              {overview.error && <ErrorNote message={overview.error} />}
+              <ListPage view={route as View} onChanged={overview.reload} hosted={!!hostedRole} />
+              {route === "inbox" && overview.data?.per_day.some((day) => day.ats + day.list + day.board + day.email > 0) && (
+                <details className="rounded-xl border border-line bg-surface p-4">
+                  <summary className="cursor-pointer text-sm font-medium">Discovery activity · last 14 days</summary>
+                  <div className="mt-4"><DailyChart days={overview.data.per_day} /></div>
+                </details>
               )}
-              <ListPage view={route as View} onChanged={overview.reload} />
             </>
           )}
         </div>
@@ -61,31 +93,56 @@ export default function App({ onSignOut }: { onSignOut?: () => Promise<void> }) 
   );
 }
 
-function TopBar({ route, lastRun, onFetched, onSignOut }: { route: Route; lastRun: string | null; onFetched: () => void; onSignOut?: () => Promise<void> }) {
+function Discovery({ overview }: { overview: Awaited<ReturnType<typeof api.overview>> | null }) {
+  return (
+    <section className="radar-hero relative isolate overflow-hidden rounded-2xl border border-line px-5 py-6 sm:px-8 sm:py-8">
+      <div className="pointer-events-none absolute -right-14 -top-24 -z-10 size-80 rounded-full border border-[#6f91ff]/20 shadow-[0_0_75px_#345dee35,inset_0_0_90px_#345dee30] sm:right-12" aria-hidden="true" />
+      <p className="text-xs font-semibold uppercase tracking-[.23em] text-[#b4c7ff]">InternRadar / Discovery</p>
+      <h2 className="mt-3 max-w-lg text-3xl font-semibold leading-tight tracking-tight text-white sm:text-5xl">Find your next internship.</h2>
+      <p className="mt-3 max-w-md text-sm leading-relaxed text-ink-2">Browse openings, spot upcoming deadlines, and save roles worth coming back to.</p>
+      <a href="#opportunity-feed" onClick={(event) => { event.preventDefault(); document.getElementById("opportunity-feed")?.focus(); }} className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-[#c6d4ff] hover:text-white">Browse the feed <ArrowDownRight className="size-4" aria-hidden="true"/></a>
+      {overview && <div className="mt-5 border-t border-line pt-4"><StatTiles overview={overview} /></div>}
+    </section>
+  );
+}
+
+function TopBar({ route, lastRun, onFetched, onSignOut, hosted }: { route: Route; lastRun: string | null; onFetched: () => void; onSignOut?: () => Promise<void>; hosted: boolean }) {
   const [running, setRunning] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
+  const isFeed = route !== "profile" && route !== "admin";
+
   // Pick up a fetch already in progress (started from the CLI or another tab).
   useEffect(() => {
-    api.fetchState().then((s) => setRunning(s.running)).catch(() => undefined);
-  }, []);
+    if (isFeed && !hosted) api.fetchState().then((s) => setRunning(s.running)).catch(() => undefined);
+  }, [isFeed, hosted]);
 
   useEffect(() => {
     if (!running) return;
     const timer = window.setInterval(async () => {
-      const state = await api.fetchState();
-      if (state.running) return;
-      setRunning(false);
-      setMessage(state.last_error ? `Fetch failed: ${state.last_error}` :
-        state.last_new != null ? `${state.last_new} new internship${state.last_new === 1 ? "" : "s"}` : null);
-      onFetched();
-      window.dispatchEvent(new Event("internradar:refresh"));
+      try {
+        const state = await api.fetchState();
+        if (state.running) return;
+        setRunning(false);
+        setMessage(state.last_error ? `Fetch failed: ${state.last_error}` :
+          state.last_new != null ? `${state.last_new} new internship${state.last_new === 1 ? "" : "s"}` : null);
+        onFetched();
+        window.dispatchEvent(new Event("internradar:refresh"));
+      } catch (e) {
+        setRunning(false);
+        setMessage((e as Error).message);
+      }
     }, 2000);
     return () => window.clearInterval(timer);
   }, [running, onFetched]);
 
   async function start() {
     setMessage(null);
+    if (hosted) {
+      onFetched();
+      window.dispatchEvent(new Event("internradar:refresh"));
+      return;
+    }
     try {
       await api.startFetch();
       setRunning(true);
@@ -97,25 +154,25 @@ function TopBar({ route, lastRun, onFetched, onSignOut }: { route: Route; lastRu
   const { title, hint } = TITLES[route];
   return (
     <header className="sticky top-0 z-20 border-b border-line bg-page/85 backdrop-blur">
-      <div className="mx-auto flex w-full max-w-6xl items-center gap-4 px-6 py-3.5">
+      <div className="mx-auto flex w-full max-w-6xl items-center gap-2 px-4 py-3.5 sm:gap-4 sm:px-6">
         <div className="min-w-0 flex-1">
           <h1 className="text-base font-semibold text-ink">{title}</h1>
           <p className="truncate text-xs text-muted">{hint}</p>
         </div>
         <p className="hidden text-xs text-muted sm:block" aria-live="polite">
-          {message ?? (running ? "Fetching every source… (2-3 min)" : `Last fetch ${timeAgo(lastRun)}`)}
+          {message ?? (isFeed ? running ? "Fetching every source… (2-3 min)" : lastRun ? `Last source run ${timeAgo(lastRun)}` : "No source run recorded" : null)}
         </p>
-        {onSignOut && <Button variant="outline" onClick={() => void onSignOut().catch((e: Error) => setMessage(e.message))}>Sign out</Button>}
-        <Button variant="primary" onClick={start} disabled={running}>
+        {onSignOut && <Button className="shrink-0" variant="outline" onClick={() => void onSignOut().catch((e: Error) => setMessage(e.message))}>Sign out</Button>}
+        {isFeed && <Button variant="primary" onClick={start} disabled={running}>
           <RefreshCw className={running ? "size-4 animate-spin" : "size-4"} />
-          {running ? "Fetching" : "Refresh"}
-        </Button>
+          {hosted ? route === "inbox" ? "Reload feed" : "Reload data" : running ? "Fetching" : "Refresh"}
+        </Button>}
       </div>
     </header>
   );
 }
 
-function ListPage({ view, onChanged }: { view: View; onChanged: () => void }) {
+function ListPage({ view, onChanged, hosted }: { view: View; onChanged: () => void; hosted: boolean }) {
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
   const [origin, setOrigin] = useState<Origin | null>(null);
@@ -160,12 +217,12 @@ function ListPage({ view, onChanged }: { view: View; onChanged: () => void }) {
 
   const unread = list.data?.filter((i) => !i.seen).length ?? 0;
   return (
-    <Card>
+    <section id="opportunity-feed" tabIndex={-1} className="scroll-mt-24 rounded-xl border border-line bg-surface">
       <CardHeader
         title={list.data ? `${list.data.length} internship${list.data.length === 1 ? "" : "s"}` : "Loading…"}
         hint={view === "inbox" && unread ? `${unread} unread` : undefined}
         right={
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <label className="relative">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted" />
               <span className="sr-only">Search role or company</span>
@@ -173,7 +230,7 @@ function ListPage({ view, onChanged }: { view: View; onChanged: () => void }) {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search role or company"
-                className="w-56 rounded-lg border border-line bg-page py-1.5 pl-8 pr-3 text-sm text-ink placeholder:text-muted focus:border-accent focus:outline-none"
+                className="w-full max-w-56 rounded-lg border border-line bg-page py-1.5 pl-8 pr-3 text-sm text-ink placeholder:text-muted focus:border-accent focus:outline-none"
               />
             </label>
             {view === "inbox" && unread > 0 && (
@@ -187,17 +244,23 @@ function ListPage({ view, onChanged }: { view: View; onChanged: () => void }) {
       ) : (
         list.data && (
           <OpportunityList items={list.data} origin={origin} onOrigin={setOrigin} onOpen={open}
-            onToggle={toggle} emptyHint={EMPTY_HINTS[view as Route] ?? ""} />
+            onToggle={toggle} emptyHint={query.trim() || origin ? "Try a different search or source." : hosted && view === "inbox"
+              ? "Listings appear here after a catalogue run. Reload checks for already collected results."
+              : EMPTY_HINTS[view as Route] ?? ""} />
         )
       )}
       {openId !== null && <OpportunityDrawer id={openId} onClose={() => setOpenId(null)} onChange={replace} />}
-    </Card>
+    </section>
   );
 }
 
 function FundingPage() {
   const [days, setDays] = useState(60);
   const funding = useData(() => api.funding(days), [days]);
+  useEffect(() => {
+    window.addEventListener("internradar:refresh", funding.reload);
+    return () => window.removeEventListener("internradar:refresh", funding.reload);
+  }, [funding.reload]);
   return (
     <Card>
       <CardHeader

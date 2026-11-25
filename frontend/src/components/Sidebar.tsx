@@ -1,4 +1,4 @@
-import { Bookmark, CalendarClock, EyeOff, Inbox, Mail, Radar, ServerCog, Sparkles, TrendingUp } from "lucide-react";
+import { Bookmark, CalendarClock, EyeOff, Inbox, Mail, Radar, ServerCog, Shield, Sparkles, TrendingUp, UserRound } from "lucide-react";
 import type { ComponentType } from "react";
 import type { Overview } from "../api";
 import type { Route } from "../hooks";
@@ -11,26 +11,30 @@ const NAV: { route: Route; label: string; icon: ComponentType<{ className?: stri
   { route: "funding", label: "Funding radar", icon: TrendingUp },
   { route: "sources", label: "Sources", icon: ServerCog },
   { route: "hidden", label: "Hidden", icon: EyeOff },
+  { route: "profile", label: "Profile", icon: UserRound },
+  { route: "admin", label: "Admin", icon: Shield },
 ];
 
-export function Sidebar({ route, onNavigate, overview }: {
+export function Sidebar({ route, onNavigate, overview, hostedRole }: {
   route: Route;
   onNavigate: (route: Route) => void;
   overview: Overview | null;
+  hostedRole?: "student" | "admin";
 }) {
   return (
-    <nav className="flex w-60 shrink-0 flex-col border-r border-line bg-surface/60 px-3 py-4" aria-label="Main">
-      <div className="mb-6 flex items-center gap-2.5 px-2">
+    <nav className="flex shrink-0 flex-col border-b border-line bg-surface px-3 py-2 md:w-60 md:border-r md:border-b-0 md:py-4" aria-label="Main">
+      <div className="mb-2 flex items-center gap-2.5 px-2 md:mb-6">
         <span className="grid size-8 place-items-center rounded-lg bg-accent/15 text-accent">
           <Radar className="size-4.5" />
         </span>
         <div>
           <p className="text-sm font-semibold tracking-tight text-ink">InternRadar</p>
-          <p className="text-[11px] text-muted">every internship, one feed</p>
+          <p className="text-[11px] text-muted">STUDENT WORKSPACE</p>
         </div>
       </div>
-      <ul className="space-y-0.5">
-        {NAV.map(({ route: r, label, icon: Icon, count }) => {
+      <ul className="flex flex-wrap gap-1 md:block md:space-y-0.5">
+        {NAV.filter(({ route: r }) => (r !== "profile" || hostedRole) && (r !== "admin" || hostedRole === "admin"))
+          .map(({ route: r, label, icon: Icon, count }) => {
           const value = count && overview ? (overview[count] as number) : 0;
           return (
             <li key={r}>
@@ -39,7 +43,7 @@ export function Sidebar({ route, onNavigate, overview }: {
                 aria-current={route === r ? "page" : undefined}
                 className={cx(
                   "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors",
-                  route === r ? "bg-raised font-medium text-ink" : "text-ink-2 hover:bg-raised/60 hover:text-ink",
+                  route === r ? "bg-accent/20 font-semibold text-ink" : "text-ink-2 hover:bg-raised/60 hover:text-ink",
                 )}
               >
                 <Icon className={cx("size-4", route === r ? "text-accent" : "text-muted")} />
@@ -50,7 +54,7 @@ export function Sidebar({ route, onNavigate, overview }: {
           );
         })}
       </ul>
-      {overview && (
+      {overview && (!hostedRole || Object.keys(overview.inboxes).length > 0) && (
         <div className="mt-auto space-y-1.5 border-t border-line px-2 pt-4 text-xs text-muted">
           {Object.entries(overview.inboxes).map(([label, connected]) => (
             <p key={label} className="flex items-center gap-2">

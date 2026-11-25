@@ -27,6 +27,11 @@ class WebSettings:
     client_id: str
     client_secret: str
     state_secret: str
+    local_http: bool = False
+
+    @property
+    def session_cookie(self) -> str:
+        return "internradar-local" if self.local_http else COOKIE
 
 
 @dataclass(frozen=True)
@@ -108,9 +113,9 @@ def install_sign_in(app: FastAPI, engine: Engine, settings: WebSettings) -> None
     app.add_middleware(
         SessionMiddleware,
         secret_key=settings.state_secret,
-        session_cookie="__Host-ir-state",
+        session_cookie="ir-state-local" if settings.local_http else "__Host-ir-state",
         max_age=600,
-        https_only=True,
+        https_only=not settings.local_http,
     )
     oauth = OAuth()
     google = oauth.register(
@@ -135,17 +140,27 @@ def install_sign_in(app: FastAPI, engine: Engine, settings: WebSettings) -> None
         if not claims or claims.get("iss") != ISSUER or not claims.get("sub"):
             raise HTTPException(400, "Google sign-in could not be verified")
         token = await run_in_threadpool(
-            create_session, engine, ISSUER, claims["sub"], request.cookies.get(COOKIE)
+            create_session,
+            engine,
+            ISSUER,
+            claims["sub"],
+            request.cookies.get(settings.session_cookie),
         )
         response = RedirectResponse("/", status_code=303, headers={"Cache-Control": "no-store"})
         response.set_cookie(
-            COOKIE, token, max_age=MAX_AGE, secure=True, httponly=True, samesite="lax", path="/"
+            settings.session_cookie,
+            token,
+            max_age=MAX_AGE,
+            secure=not settings.local_http,
+            httponly=True,
+            samesite="lax",
+            path="/",
         )
         return response
 
     @app.post("/auth/logout")
     def logout(request: Request):
-        token = request.cookies.get(COOKIE)
+        token = request.cookies.get(settings.session_cookie)
         if token and len(token) == 43:
             with engine.begin() as conn:
                 conn.execute(
@@ -153,5 +168,11 @@ def install_sign_in(app: FastAPI, engine: Engine, settings: WebSettings) -> None
                     {"token": _digest(token)},
                 )
         response = Response(status_code=204)
-        response.delete_cookie(COOKIE, secure=True, httponly=True, samesite="lax", path="/")
+        response.delete_cookie(
+            settings.session_cookie,
+            secure=not settings.local_http,
+            httponly=True,
+            samesite="lax",
+            path="/",
+        )
         return response

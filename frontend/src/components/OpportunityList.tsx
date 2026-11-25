@@ -47,14 +47,14 @@ function Row({ item, onOpen, onToggle }: { item: Opportunity } & Pick<Props, "on
   const due = item.deadline_at ? dueIn(item.deadline_at) : null;
   const link = item.apply_url ?? item.url;
   return (
-    <li className="group flex items-center gap-3 px-5 py-3 transition-colors hover:bg-raised/60">
+    <li className="group flex items-center gap-2 px-3 py-4 sm:gap-3 sm:px-5 transition-colors hover:bg-raised/60">
       <span
         aria-label={item.seen ? undefined : "Unread"}
         className={cx("size-2 shrink-0 rounded-full", item.seen ? "bg-transparent" : "bg-accent")}
       />
-      <button onClick={() => onOpen(item)} className="min-w-0 flex-1 text-left focus-visible:outline-none">
+      <button onClick={() => onOpen(item)} className="min-w-0 flex-1 text-left rounded-sm">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className={cx("truncate text-sm", item.seen ? "text-ink-2" : "font-semibold text-ink")}>
+          <span className={cx("break-words text-sm sm:text-base", item.seen ? "text-ink-2" : "font-semibold text-ink")}>
             {item.title}
           </span>
           {due && !due.past && (
@@ -84,7 +84,7 @@ function Row({ item, onOpen, onToggle }: { item: Opportunity } & Pick<Props, "on
           <Bookmark className="size-4" fill={item.bookmarked ? "currentColor" : "none"} />
         </Button>
         <Button aria-label={item.hidden ? "Unhide" : "Hide"} onClick={() => onToggle(item, "hidden")}
-          className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100">
+          className="md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100">
           {item.hidden ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
         </Button>
         {link && (
