@@ -39,10 +39,18 @@ PostgreSQL is the source of truth; Kafka transports asynchronous work. Signing i
 | Phase | Remaining work | Done when |
 |---|---|---|
 | 1. Research and Kafka | Complete: Java 25 tests, live import/replay, and a fixture-driven recovery and dead-letter test passed locally. | A public import reaches PostgreSQL; replay does not change the catalogue; repeated HTTP failures leave existing jobs unchanged; an interrupted claim recovers through its lease. |
-| 2. Student experience | Google sign-in, onboarding, explainable recommendations, and private saves. Add source/domain coverage beyond the first board. | Two accounts rank the same catalogue differently and cannot read or change one another's saved jobs. Opening a feed does not enqueue research. |
+| 2. Student experience | Sign-in and onboarding implemented; live Google browser verification pending. Next: explainable recommendations, private saves, and broader source coverage. | Two accounts rank the same catalogue differently and cannot read or change one another's saved jobs. Opening a feed does not enqueue research. |
 | 3. Funding and outreach | Collect funding evidence, verify careers pages, recommend relevant companies, and build reviewed outreach drafts. | A verified round surfaces as a company lead, not proof of hiring. Students can edit drafts and send them from their own email client. |
 | 4. Inbox and applications | Add opt-in private mailbox processing, application tracking, and disconnect/deletion flows. | Placement leads and updates are visible only to their owner. Uncertain matches require review. No automatic submission or outbound mail. |
 | 5. Release verification | Browser journeys, account isolation, queue and API load, restart recovery, and backup restore. | End-to-end checks pass without depending on Coder. Only then select and verify the Coder deployment separately. |
+
+## Local Google sign-in
+
+Reuse your existing development OAuth client if its type is **Web application** and it is used for sign-in. In Google Auth Platform → **Clients**, add `http://localhost:8080/login/oauth2/code/google` under **Authorized redirect URIs**. Keep the legacy callback if you still use the old app. If you set `WEB_PORT` to another port, use that same port in the redirect URI. If the consent screen is in Testing, keep both Google accounts in the test-user list for that project. A desktop Gmail OAuth client is not interchangeable with the Web client.
+
+Set `INTERNRADAR_GOOGLE_CLIENT_ID` and `INTERNRADAR_GOOGLE_CLIENT_SECRET` in your ignored `v2/.env`. Use `http://localhost:8080/` in the browser, not the IP address. Without credentials, Google sign-in is unavailable and private endpoints stay protected. The app requests only `openid email profile`; it does not get Gmail access. Local sessions are server-side and end when the web process restarts; profiles persist in PostgreSQL.
+
+To smoke-test with your two Google accounts, sign in with the first and save preferences. In another browser profile, sign in with the second account and confirm onboarding starts fresh. Skip or save different preferences, then return to the first browser and confirm its preferences are unchanged. Sign out and confirm private endpoints require sign-in again.
 
 ## Local startup and Coder
 

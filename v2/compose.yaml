@@ -68,6 +68,9 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/internradar
       SPRING_DATASOURCE_USERNAME: internradar_web
       SPRING_DATASOURCE_PASSWORD: ${WEB_DB_PASSWORD:?}
+      INTERNRADAR_GOOGLE_CLIENT_ID: ${INTERNRADAR_GOOGLE_CLIENT_ID:-}
+      INTERNRADAR_GOOGLE_CLIENT_SECRET: ${INTERNRADAR_GOOGLE_CLIENT_SECRET:-}
+      INTERNRADAR_GOOGLE_REDIRECT_URI: "http://localhost:${WEB_PORT:-8080}/login/oauth2/code/google"
     depends_on:
       migrate:
         condition: service_completed_successfully
