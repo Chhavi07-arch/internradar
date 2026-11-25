@@ -1,0 +1,25 @@
+# Test-only host listeners. The normal Compose stack does not publish these ports.
+services:
+  postgres:
+    ports:
+      - "127.0.0.1::5432"
+    volumes: !reset []
+    tmpfs:
+      - /var/lib/postgresql/data
+    # Keep the role bootstrap mount while using ephemeral database storage.
+    configs:
+      - source: research_test_roles
+        target: /docker-entrypoint-initdb.d/01-roles.sh
+  kafka:
+    environment:
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,LOCAL://:19092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,LOCAL://127.0.0.1:${RESEARCH_TEST_KAFKA_PORT:-29092}
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,LOCAL:PLAINTEXT
+    ports:
+      - "127.0.0.1:${RESEARCH_TEST_KAFKA_PORT:-29092}:19092"
+    volumes: !reset []
+    tmpfs:
+      - /var/lib/kafka/data:uid=1000,gid=1000
+configs:
+  research_test_roles:
+    file: ./backend/db/init/01-roles.sh
