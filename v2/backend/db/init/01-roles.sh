@@ -2,11 +2,18 @@
 # Executed by the official PostgreSQL image on first initialization of PGDATA.
 set -eu
 
-: "${POSTGRES_USER:?Set POSTGRES_USER to the bootstrap administrator}"
-: "${POSTGRES_DB:?Set POSTGRES_DB to the application database}"
-: "${WEB_DB_PASSWORD:?Set WEB_DB_PASSWORD}"
-: "${RESEARCH_DB_PASSWORD:?Set RESEARCH_DB_PASSWORD}"
-: "${MIGRATION_DB_PASSWORD:?Set MIGRATION_DB_PASSWORD}"
+require_env() {
+    if [ -z "$2" ]; then
+        printf 'Required environment variable is missing or empty: %s\n' "$1" >&2
+        exit 1
+    fi
+}
+
+require_env POSTGRES_USER "${POSTGRES_USER:-}"
+require_env POSTGRES_DB "${POSTGRES_DB:-}"
+require_env WEB_DB_PASSWORD "${WEB_DB_PASSWORD:-}"
+require_env RESEARCH_DB_PASSWORD "${RESEARCH_DB_PASSWORD:-}"
+require_env MIGRATION_DB_PASSWORD "${MIGRATION_DB_PASSWORD:-}"
 
 # Read passwords from the environment rather than exposing them in psql's argv.
 PGDATABASE="$POSTGRES_DB" psql -X --no-password --username="$POSTGRES_USER" --set=ON_ERROR_STOP=1 <<'SQL'
