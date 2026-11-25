@@ -24,3 +24,8 @@ profile/profile.yaml
 frontend/dist/
 
 frontend/dist-demo/
+
+# Greenfield Java and Vite build output
+/v2/backend/**/target/
+/v2/backend/.mvn/wrapper/maven-wrapper.jar
+/v2/frontend/dist/

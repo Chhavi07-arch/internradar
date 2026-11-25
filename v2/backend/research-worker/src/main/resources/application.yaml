@@ -1,0 +1,14 @@
+spring:
+  application:
+    name: internradar-research-worker
+  main:
+    web-application-type: none
+    keep-alive: true
+  kafka:
+    admin:
+      fail-fast: true
+    consumer:
+      enable-auto-commit: false
+      group-id: internradar-research-v1
+    listener:
+      ack-mode: manual_immediate

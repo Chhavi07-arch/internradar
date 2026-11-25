@@ -143,8 +143,9 @@ India-open remote) before it is stored.
 
 ## Design
 
-The plan for v2 (multi-user, profile as the source of truth, Next.js) is in
-[docs/architecture.md](docs/architecture.md).
+The greenfield v2 stack (Spring Boot, React, PostgreSQL, and Kafka) lives in `v2/`.
+See the [canonical architecture and startup guide](docs/architecture.md) for its
+status and deployment plan. The setup instructions above are for the existing app.
 
 ## Layout
 
