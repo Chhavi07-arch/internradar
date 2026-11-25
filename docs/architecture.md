@@ -32,13 +32,13 @@ PostgreSQL is the source of truth; Kafka transports asynchronous work. Signing i
 ## Current implementation
 
 - Scaffold: Maven reactor (Java 25, Spring Boot), React shell, PostgreSQL/Flyway schema and role bootstrap, and Kafka topic registration. The React shell deliberately does not show fictional feeds or offer an authentication bypass.
-- Research import code: a configured Stripe Greenhouse board, half-hour tasks, a PostgreSQL outbox, and a Kafka consumer with task leases, bounded source retries, a dead-letter topic, and idempotent listing writes. The schema and live board endpoint have been checked separately; the full worker-to-broker flow still needs integration verification.
+- Research import code: a configured Stripe Greenhouse board, half-hour tasks, a PostgreSQL outbox, and a Kafka consumer with task leases, bounded source retries, a dead-letter topic, and idempotent listing writes. Local Compose verification passed: the worker imported the live Stripe board through Kafka into PostgreSQL, then committed a replay of the completed task without changing listings or sightings. Worker interruption, retry exhaustion, and dead-letter handling still need dedicated tests.
 
 ## Build phases and acceptance gates
 
 | Phase | Remaining work | Done when |
 |---|---|---|
-| 1. Research and Kafka | Run Java 25 tests and exercise the real Compose import path. Verify redelivery, restarts, retries and dead-letter behavior. | A public import reaches PostgreSQL; replay does not mutate the completed task or catalogue; a failed fetch does not close jobs. |
+| 1. Research and Kafka | Java 25 tests and live import/replay passed. Still verify worker interruption, retry exhaustion, and dead-letter handling. | A public import reaches PostgreSQL; replay does not change the catalogue; failed fetches do not close jobs; interrupted tasks recover or reach the dead-letter topic. |
 | 2. Student experience | Google sign-in, onboarding, explainable recommendations, and private saves. Add source/domain coverage beyond the first board. | Two accounts rank the same catalogue differently and cannot read or change one another's saved jobs. Opening a feed does not enqueue research. |
 | 3. Funding and outreach | Collect funding evidence, verify careers pages, recommend relevant companies, and build reviewed outreach drafts. | A verified round surfaces as a company lead, not proof of hiring. Students can edit drafts and send them from their own email client. |
 | 4. Inbox and applications | Add opt-in private mailbox processing, application tracking, and disconnect/deletion flows. | Placement leads and updates are visible only to their owner. Uncertain matches require review. No automatic submission or outbound mail. |
