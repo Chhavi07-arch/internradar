@@ -46,6 +46,8 @@ PostgreSQL is the source of truth; Kafka transports asynchronous work. Signing i
 
 ## Local startup and Coder
 
+For backend verification outside Docker, point `JAVA_HOME` at a Java 25 JDK and put `$JAVA_HOME/bin` first on `PATH`. Confirm `java -version`, then run `./mvnw -B verify` from `v2/backend/`. The Java 25 verification passed locally (29 Greenhouse adapter tests); this does not replace the live Kafka replay check below.
+
 From `v2/`, copy `.env.example` to `.env`, set a distinct random password for each role, then run `docker compose up --build -d`. Open `http://127.0.0.1:8080/` (or the configured `WEB_PORT`). Check `docker compose ps -a` and `/actuator/health`. The one-shot Flyway container should exit successfully; the PostgreSQL role bootstrap runs only on a fresh volume. Changing `.env` after initialization does not rotate database passwords. Kafka and PostgreSQL ports are not published. The pinned Flyway image runs as AMD64 and requires emulation on ARM hosts.
 
 For the Phase 1 import/replay check, use a fresh disposable Compose project: from `v2/`, run `docker compose -p internradar-v2-smoke up --build -d` (set a free `WEB_PORT` in `.env` if needed), then `bash scripts/smoke-research.sh --local-smoke`. The check waits for a real Stripe import, republishes its completed Kafka task, waits for the consumer group to commit the replay, and checks that its source sightings and listings are unchanged. Run away from the half-hour scheduling boundary to avoid a new poll during the comparison. When done, stop the disposable project with `docker compose -p internradar-v2-smoke down`.
