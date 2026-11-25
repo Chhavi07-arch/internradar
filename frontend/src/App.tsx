@@ -50,6 +50,7 @@ export default function App({ hostedRole, onSignOut }: { hostedRole?: "student" 
     <div className="flex h-full flex-col md:flex-row">
       {!onboarding && !waiting && <Sidebar route={route} onNavigate={navigate} overview={overview.data} hostedRole={hostedRole} />}
       <main ref={mainRef} className="flex min-w-0 flex-1 flex-col overflow-y-auto">
+        {import.meta.env.MODE === "public-demo" && <p className="border-b border-white/15 bg-[#2c3480] px-4 py-2 text-center text-xs text-white">PUBLIC DEMO · Fictional listings · No login or Gmail access · Changes last until reload</p>}
         <TopBar route={waiting ? "profile" : route} lastRun={overview.data?.last_run_at ?? null} onFetched={overview.reload} onSignOut={onSignOut} hosted={!!hostedRole} />
         <div className="mx-auto w-full max-w-6xl space-y-5 px-4 py-5 sm:px-6 sm:py-6">
           {waiting ? <p role="status" className="text-sm text-ink-2">Loading profile…</p>
@@ -73,7 +74,7 @@ export default function App({ hostedRole, onSignOut }: { hostedRole?: "student" 
           : route === "funding" ? (
             <FundingPage />
           ) : route === "sources" ? (
-            <SourcesPage />
+            <SourcesPage hosted={!!hostedRole} />
           ) : (
             <>
               {route === "inbox" && <Discovery overview={overview.data} />}
@@ -96,12 +97,12 @@ export default function App({ hostedRole, onSignOut }: { hostedRole?: "student" 
 function Discovery({ overview }: { overview: Awaited<ReturnType<typeof api.overview>> | null }) {
   return (
     <section className="radar-hero relative isolate overflow-hidden rounded-2xl border border-line px-5 py-6 sm:px-8 sm:py-8">
-      <div className="pointer-events-none absolute -right-14 -top-24 -z-10 size-80 rounded-full border border-[#6f91ff]/20 shadow-[0_0_75px_#345dee35,inset_0_0_90px_#345dee30] sm:right-12" aria-hidden="true" />
+      <div className="editorial-orbit pointer-events-none absolute inset-y-0 right-0 -z-10 w-1/2" aria-hidden="true" />
       <p className="text-xs font-semibold uppercase tracking-[.23em] text-[#b4c7ff]">InternRadar / Discovery</p>
-      <h2 className="mt-3 max-w-lg text-3xl font-semibold leading-tight tracking-tight text-white sm:text-5xl">Find your next internship.</h2>
+      <h2 className="editorial-title mt-3 max-w-2xl text-4xl leading-[.99] tracking-tight text-white sm:text-6xl">Your next chapter<br /><em>starts here.</em></h2>
       <p className="mt-3 max-w-md text-sm leading-relaxed text-ink-2">Browse openings, spot upcoming deadlines, and save roles worth coming back to.</p>
       <a href="#opportunity-feed" onClick={(event) => { event.preventDefault(); document.getElementById("opportunity-feed")?.focus(); }} className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-[#c6d4ff] hover:text-white">Browse the feed <ArrowDownRight className="size-4" aria-hidden="true"/></a>
-      {overview && <div className="mt-5 border-t border-line pt-4"><StatTiles overview={overview} /></div>}
+      {overview && <div className="editorial-stats mt-6 rounded-sm px-4 py-4"><StatTiles overview={overview} /></div>}
     </section>
   );
 }
@@ -177,6 +178,7 @@ function ListPage({ view, onChanged, hosted }: { view: View; onChanged: () => vo
   const [debounced, setDebounced] = useState("");
   const [origin, setOrigin] = useState<Origin | null>(null);
   const [openId, setOpenId] = useState<number | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const list = useData(() => api.opportunities(view, debounced, origin), [view, debounced, origin]);
 
   useEffect(() => {
@@ -200,19 +202,30 @@ function ListPage({ view, onChanged, hosted }: { view: View; onChanged: () => vo
     onChanged();
   }, [view, onChanged]);
 
-  async function open(item: Opportunity) {
+  async function change(action: () => Promise<void>) {
+    setActionError(null);
+    try {
+      await action();
+    } catch {
+      setActionError("Could not update your feed. Try again.");
+    }
+  }
+
+  function open(item: Opportunity) {
     setOpenId(item.id);
-    if (!item.seen) replace(await api.update(item.id, { seen: true }));
+    if (!item.seen) void change(async () => replace(await api.update(item.id, { seen: true })));
   }
 
-  async function toggle(item: Opportunity, field: "bookmarked" | "hidden") {
-    replace(await api.update(item.id, { [field]: !item[field] }));
+  function toggle(item: Opportunity, field: "bookmarked" | "hidden") {
+    void change(async () => replace(await api.update(item.id, { [field]: !item[field] })));
   }
 
-  async function markAllRead() {
-    await api.markAllSeen();
-    list.reload();
-    onChanged();
+  function markAllRead() {
+    void change(async () => {
+      await api.markAllSeen();
+      list.reload();
+      onChanged();
+    });
   }
 
   const unread = list.data?.filter((i) => !i.seen).length ?? 0;
@@ -234,11 +247,12 @@ function ListPage({ view, onChanged, hosted }: { view: View; onChanged: () => vo
               />
             </label>
             {view === "inbox" && unread > 0 && (
-              <Button variant="outline" onClick={markAllRead}><CheckCheck className="size-4" /> Mark all read</Button>
+              <Button variant="outline" onClick={markAllRead}><CheckCheck className="size-4" /> Mark inbox read</Button>
             )}
           </div>
         }
       />
+      {actionError && <p role="alert" className="px-5 py-3 text-sm text-[#f08080]">{actionError}</p>}
       {list.error ? (
         <div className="p-5"><ErrorNote message={list.error} /></div>
       ) : (
@@ -279,7 +293,7 @@ function FundingPage() {
   );
 }
 
-function SourcesPage() {
+function SourcesPage({ hosted }: { hosted: boolean }) {
   const sources = useData(api.sources, []);
   useEffect(() => {
     window.addEventListener("internradar:refresh", sources.reload);
@@ -293,7 +307,7 @@ function SourcesPage() {
         hint={failed ? `${failed} failing: they are retried on the next fetch` : "All healthy"}
       />
       {sources.error ? <div className="p-5"><ErrorNote message={sources.error} /></div>
-        : sources.data && <SourcesTable sources={sources.data} />}
+        : sources.data && <SourcesTable sources={sources.data} hosted={hosted} />}
     </Card>
   );
 }

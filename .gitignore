@@ -22,3 +22,5 @@ profile/profile.yaml
 
 # Frontend build output (run `npm run build`)
 frontend/dist/
+
+frontend/dist-demo/

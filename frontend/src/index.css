@@ -3,16 +3,16 @@
 /* Surfaces, ink and series colours follow the validated dark palette
    (dataviz reference instance; series 1-4 checked against --color-surface). */
 @theme {
-  --color-page: #0b0d14;
-  --color-surface: #131725;
-  --color-raised: #1b2235;
+  --color-page: #09090b;
+  --color-surface: #151519;
+  --color-raised: #222229;
   --color-line: rgb(255 255 255 / 0.1);
   --color-ink: #ffffff;
   --color-ink-2: #ced5e7;
   --color-muted: #9ba6bf;
   --color-grid: #2c2c2a;
   --color-axis: #383835;
-  --color-accent: #3962dd;
+  --color-accent: #2c3480;
 
   --color-origin-ats: #3987e5;
   --color-origin-list: #d95926;
@@ -43,7 +43,7 @@ body {
 }
 
 .radar-hero {
-  background: radial-gradient(ellipse at 85% 10%, #243a81 0%, transparent 58%), #101421;
+  background: #101014;
 }
 
 :where(button, a, input, textarea, select, summary):focus-visible {
@@ -54,3 +54,11 @@ body {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+.editorial-title { font-family: Georgia, "Times New Roman", serif; font-weight: 400; }
+.editorial-title em { color: #b3bbfc; }
+.editorial-orbit {
+  background: repeating-radial-gradient(ellipse at 85% 15%, transparent 0 19px, #868eef22 20px 21px, transparent 22px 32px), radial-gradient(ellipse at 85% 18%, #2c3480, transparent 69%);
+  mask-image: linear-gradient(90deg, transparent, black 40%);
+}
+.editorial-stats { background: #f1eff0; --color-ink: #161623; --color-ink-2: #414254; }

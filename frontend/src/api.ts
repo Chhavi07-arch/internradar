@@ -108,6 +108,10 @@ export interface FetchState {
 export type OpportunityPatch = Partial<Pick<Opportunity, "seen" | "bookmarked" | "hidden" | "notes">>;
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  if (import.meta.env.MODE === "public-demo") {
+    const { demoRequest } = await import("./publicDemo");
+    return structuredClone(demoRequest(path, init)) as T;
+  }
   const response = await fetch(path, {
     ...init,
     headers: { "Content-Type": "application/json", ...init?.headers },

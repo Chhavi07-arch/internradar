@@ -1,5 +1,6 @@
+import * as Dialog from "@radix-ui/react-dialog";
 import { Bookmark, ExternalLink, TrendingUp, X } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
 import type { Opportunity, OpportunityDetail, OpportunityPatch } from "../api";
 import { api } from "../api";
 import { dueIn, place, shortDate, sourceLabel, timeAgo } from "../format";
@@ -15,35 +16,62 @@ interface Props {
 export function OpportunityDrawer({ id, onClose, onChange }: Props) {
   const { data, setData, error } = useData(() => api.opportunity(id), [id]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  const [updating, setUpdating] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const busy = useRef(false);
+  const returnFocus = useRef<HTMLElement | null>(null);
+
+  useLayoutEffect(() => {
+    if (document.activeElement instanceof HTMLElement && !returnFocus.current) {
+      returnFocus.current = document.activeElement;
+    }
+  }, []);
 
   async function update(patch: OpportunityPatch) {
-    const updated = await api.update(id, patch);
-    setData((d) => (d ? { ...d, ...updated } : d));
-    onChange(updated);
+    if (busy.current) return;
+    busy.current = true;
+    setUpdating(true);
+    setSaveError(null);
+    try {
+      const updated = await api.update(id, patch);
+      setData((d) => (d ? { ...d, ...updated } : d));
+      onChange(updated);
+    } catch {
+      setSaveError("Changes could not be saved. Try again.");
+    } finally {
+      busy.current = false;
+      setUpdating(false);
+    }
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end" role="dialog" aria-modal="true" aria-label="Internship details">
-      <button aria-label="Close" onClick={onClose} className="absolute inset-0 bg-black/60 backdrop-blur-[2px]" />
-      <aside className="relative flex h-full w-full max-w-xl flex-col border-l border-line bg-surface shadow-2xl">
-        <div className="flex items-center justify-end border-b border-line px-4 py-2.5">
-          <Button aria-label="Close" onClick={onClose}><X className="size-4" /></Button>
-        </div>
-        <div className="flex-1 overflow-y-auto px-6 py-5">
-          {error && <p className="text-sm text-[#f08080]">{error}</p>}
-          {data && <Detail item={data} onUpdate={update} />}
-        </div>
-      </aside>
-    </div>
+    <Dialog.Root open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/65 backdrop-blur-[2px]" />
+        <Dialog.Content className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col border-l border-line bg-surface shadow-2xl"
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            if (returnFocus.current?.isConnected) returnFocus.current.focus();
+            else document.getElementById("opportunity-feed")?.focus();
+          }}>
+          <div className="flex items-center justify-between gap-4 border-b border-line px-5 py-3">
+            <Dialog.Title className="text-xs font-semibold uppercase tracking-widest text-ink-2">Internship details</Dialog.Title>
+            <Dialog.Description className="sr-only">Review the opportunity and manage your saved listing and notes.</Dialog.Description>
+            <Dialog.Close className="grid size-9 place-items-center rounded-lg text-ink-2 hover:bg-raised" aria-label="Close internship details"><X className="size-4" /></Dialog.Close>
+          </div>
+          <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-6">
+            {error && <p role="alert" className="text-sm text-[#f08080]">{error}</p>}
+            {!data && !error && <p role="status" className="text-sm text-ink-2">Loading internship…</p>}
+            {saveError && <p role="alert" className="mb-4 text-sm text-[#f08080]">{saveError}</p>}
+            {data && <Detail key={id} item={data} onUpdate={update} updating={updating} />}
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 
-function Detail({ item, onUpdate }: { item: OpportunityDetail; onUpdate: (patch: OpportunityPatch) => Promise<void> }) {
+function Detail({ item, onUpdate, updating }: { item: OpportunityDetail; onUpdate: (patch: OpportunityPatch) => Promise<void>; updating: boolean }) {
   const [notes, setNotes] = useState(item.notes ?? "");
   const due = item.deadline_at ? dueIn(item.deadline_at) : null;
   const link = item.apply_url ?? item.url;
@@ -68,18 +96,18 @@ function Detail({ item, onUpdate }: { item: OpportunityDetail; onUpdate: (patch:
         </div>
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         {link && (
           <a href={link} target="_blank" rel="noreferrer"
             className="inline-flex items-center gap-2 rounded-lg bg-accent px-3.5 py-2 text-sm font-medium text-white hover:bg-[#4d95ea]">
             {item.apply_url ? "Apply" : "View posting"} <ExternalLink className="size-3.5" />
           </a>
         )}
-        <Button variant="outline" onClick={() => onUpdate({ bookmarked: !item.bookmarked })}>
+        <Button variant="outline" disabled={updating} onClick={() => onUpdate({ bookmarked: !item.bookmarked })}>
           <Bookmark className="size-4" fill={item.bookmarked ? "currentColor" : "none"} />
           {item.bookmarked ? "Saved" : "Save"}
         </Button>
-        <Button variant="outline" onClick={() => onUpdate({ hidden: !item.hidden })}>
+        <Button variant="outline" disabled={updating} onClick={() => onUpdate({ hidden: !item.hidden })}>
           {item.hidden ? "Unhide" : "Not interested"}
         </Button>
       </div>
@@ -121,11 +149,12 @@ function Detail({ item, onUpdate }: { item: OpportunityDetail; onUpdate: (patch:
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
-          onBlur={() => notes !== (item.notes ?? "") && onUpdate({ notes })}
-          placeholder="Referral contact, things to mention, questions… saved when you click away"
+          aria-label="Private internship notes"
+          placeholder="Referral contact, things to mention, questions…"
           rows={3}
           className="w-full resize-y rounded-lg border border-line bg-page px-3 py-2 text-sm text-ink placeholder:text-muted focus:border-accent focus:outline-none"
         />
+        <Button variant="outline" className="mt-2" disabled={updating || notes.trim() === (item.notes ?? "")} onClick={() => void onUpdate({ notes: notes.trim() })}>Save note</Button>
       </Section>
 
       {item.description && (

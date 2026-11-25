@@ -36,6 +36,14 @@ due soon and where you have already applied.
 | 6 | Application tracking from email, analytics | |
 | 7 | Assisted form filling, interview prep, evaluation metrics | |
 
+## Public demo
+
+[Open the interactive demo](https://internradar-demo.vercel.app/). It uses fictional internships
+and browser-memory state only. It does not sign in, connect Gmail, or call the backend. Reloading
+resets demo edits. To build that version locally, run `npm ci && npm run build:demo` from
+`frontend/` and serve `frontend/dist-demo/`. The regular `npm run build` still builds the app
+for FastAPI, not the demo.
+
 ## Dashboard
 
 ```bash

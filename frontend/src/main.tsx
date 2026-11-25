@@ -31,6 +31,6 @@ function SessionGate() {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <SessionGate />
+    {import.meta.env.MODE === "public-demo" ? <App hostedRole="student" /> : <SessionGate />}
   </StrictMode>,
 );

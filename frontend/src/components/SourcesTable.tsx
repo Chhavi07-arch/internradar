@@ -2,8 +2,8 @@ import { CircleAlert, CircleCheck } from "lucide-react";
 import type { SourceHealth } from "../api";
 import { Empty } from "./ui";
 
-export function SourcesTable({ sources }: { sources: SourceHealth[] }) {
-  if (sources.length === 0) return <Empty title="No fetch has run yet" hint="Press Refresh to fetch every source." />;
+export function SourcesTable({ sources, hosted = false }: { sources: SourceHealth[]; hosted?: boolean }) {
+  if (sources.length === 0) return <Empty title="No source runs recorded" hint={hosted ? "This view shows recorded catalogue runs. Reload does not start a fetch." : "Press Refresh to start a fetch."} />;
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[680px] text-left text-sm">
