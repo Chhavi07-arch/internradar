@@ -27,12 +27,13 @@ Browser ── HTTPS / Coder proxy ──► Web (React + Spring Boot)
                                background dispatch           Public ATS / funding
 ```
 
-PostgreSQL is the source of truth; Kafka transports asynchronous work. Signing in, editing interests, ranking a shortlist and saving jobs do not trigger a source search. The planned research path creates one PostgreSQL task and outbox entry per source/window, publishes to Kafka before marking the outbox row delivered, then acknowledges consumption only after a durable result or retry. Retries are bounded; terminal failures go to a dead-letter topic. Duplicate delivery is expected and must not create duplicate listings. Funding announcements are evidence to investigate, not proof of hiring or a trigger to send email.
+PostgreSQL is the source of truth; Kafka transports asynchronous work. Signing in, editing interests, ranking a shortlist and saving jobs do not trigger a source search. The research worker creates one PostgreSQL task and outbox entry per source/window, publishes to Kafka before marking the outbox row delivered, then acknowledges consumption only after a durable result or retry. Retries are bounded; terminal failures go to a dead-letter topic. Duplicate delivery is expected and must not create duplicate listings. Funding announcements are evidence to investigate, not proof of hiring or a trigger to send email.
 
 ## Current implementation
 
 - Scaffold: Maven reactor (Java 25, Spring Boot), React shell, PostgreSQL/Flyway schema and role bootstrap, and Kafka topic registration. The React shell deliberately does not show fictional feeds or offer an authentication bypass.
-- First product milestone: one real Greenhouse source through the Kafka task flow; two authenticated profiles see different recommendations from the same catalogue and can save listings independently. The scheduler, Kafka job consumer and publisher, Google sign-in, recommendation and saves APIs are not yet implemented.
+- Research import code: a configured Stripe Greenhouse board, half-hour tasks, a PostgreSQL outbox, and a Kafka consumer with task leases, bounded source retries, a dead-letter topic, and idempotent listing writes. The schema and live board endpoint have been checked separately; the full worker-to-broker flow still needs integration verification.
+- Next product milestone: Google sign-in, student preferences, recommendations, and private saves. Two students should be able to see different rankings of the same catalogue without starting new fetches.
 - Later: funding discovery, draft-only outreach handed off to the student's email client, and opt-in email integration. No deployment target has been selected.
 
 ## Local startup and Coder
