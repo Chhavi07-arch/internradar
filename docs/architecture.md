@@ -33,11 +33,21 @@ PostgreSQL is the source of truth; Kafka transports asynchronous work. Signing i
 
 - Scaffold: Maven reactor (Java 25, Spring Boot), React shell, PostgreSQL/Flyway schema and role bootstrap, and Kafka topic registration. The React shell deliberately does not show fictional feeds or offer an authentication bypass.
 - Research import code: a configured Stripe Greenhouse board, half-hour tasks, a PostgreSQL outbox, and a Kafka consumer with task leases, bounded source retries, a dead-letter topic, and idempotent listing writes. The schema and live board endpoint have been checked separately; the full worker-to-broker flow still needs integration verification.
-- Next product milestone: Google sign-in, student preferences, recommendations, and private saves. Two students should be able to see different rankings of the same catalogue without starting new fetches.
-- Later: funding discovery, draft-only outreach handed off to the student's email client, and opt-in email integration. No deployment target has been selected.
+
+## Build phases and acceptance gates
+
+| Phase | Remaining work | Done when |
+|---|---|---|
+| 1. Research and Kafka | Run Java 25 tests and exercise the real Compose import path. Verify redelivery, restarts, retries and dead-letter behavior. | A public import reaches PostgreSQL; replay does not mutate the completed task or catalogue; a failed fetch does not close jobs. |
+| 2. Student experience | Google sign-in, onboarding, explainable recommendations, and private saves. Add source/domain coverage beyond the first board. | Two accounts rank the same catalogue differently and cannot read or change one another's saved jobs. Opening a feed does not enqueue research. |
+| 3. Funding and outreach | Collect funding evidence, verify careers pages, recommend relevant companies, and build reviewed outreach drafts. | A verified round surfaces as a company lead, not proof of hiring. Students can edit drafts and send them from their own email client. |
+| 4. Inbox and applications | Add opt-in private mailbox processing, application tracking, and disconnect/deletion flows. | Placement leads and updates are visible only to their owner. Uncertain matches require review. No automatic submission or outbound mail. |
+| 5. Release verification | Browser journeys, account isolation, queue and API load, restart recovery, and backup restore. | End-to-end checks pass without depending on Coder. Only then select and verify the Coder deployment separately. |
 
 ## Local startup and Coder
 
 From `v2/`, copy `.env.example` to `.env`, set a distinct random password for each role, then run `docker compose up --build -d`. Open `http://127.0.0.1:8080/` (or the configured `WEB_PORT`). Check `docker compose ps -a` and `/actuator/health`. The one-shot Flyway container should exit successfully; the PostgreSQL role bootstrap runs only on a fresh volume. Changing `.env` after initialization does not rotate database passwords. Kafka and PostgreSQL ports are not published. The pinned Flyway image runs as AMD64 and requires emulation on ARM hosts.
+
+For the Phase 1 import/replay check, use a fresh disposable Compose project: from `v2/`, run `docker compose -p internradar-v2-smoke up --build -d` (set a free `WEB_PORT` in `.env` if needed), then `bash scripts/smoke-research.sh --local-smoke`. The check waits for a real Stripe import, republishes its completed Kafka task, waits for the consumer group to commit the replay, and checks that its source sightings and listings are unchanged. Run away from the half-hour scheduling boundary to avoid a new poll during the comparison. When done, stop the disposable project with `docker compose -p internradar-v2-smoke down`.
 
 For Coder, use the same Compose stack only after confirming the workspace and Docker access. Route the Coder app to the web port from the workspace, keep the broker and DB private, and verify HTTPS and OAuth callback registration before enabling real login. Named volumes provide persistence on one workspace host, not high availability; verify the volume backing and test backups outside the workspace before a pilot.
